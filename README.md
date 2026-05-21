@@ -33,6 +33,24 @@ pytest
 ruff check civic_map_builder tests
 ```
 
+## Base-Map Enhancement
+
+The normal workflow renders faster boundary-only maps. To render with OSM context
+behind the boundaries, install the optional dependencies, download a cached PBF,
+and point the project config at it:
+
+```bash
+pip install -e ".[dev,basemap]"
+civic-map-builder basemap download maryland
+civic-map-builder render
+```
+
+`basemap download` downloads one of the built-in OSM options, currently
+`maryland` or `district-of-columbia`, into the platform cache and asks whether to
+use it for rendering. Switch between already-downloaded maps with
+`civic-map-builder basemap use district-of-columbia`. OSM base-map data is not
+committed.
+
 Each association contributes two files:
 
 - `associations/<association_id>/boundary.md` for front matter plus the boundary

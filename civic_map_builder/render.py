@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from PIL import Image, ImageDraw
-from shapely.geometry import MultiPolygon, Polygon
+from shapely.geometry import LineString, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from .associations import Association, load_association, load_associations
-from .util import CivicMapBuilderError, load_project_config
+from .basemap import BaseMapFeatures, configured_pbf_path, load_basemap_features
+from .util import BaseMapConfig, CivicMapBuilderError, load_project_config
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ REGIONAL_STYLE = RenderStyle(
 def render_preview(association_id: str, *, config_path: Path | None = None) -> Path:
     config = load_project_config(path=config_path)
     selected = load_association(association_id, config_path=config_path)
+    bounds = _padded_bounds(selected.geometry.bounds, config.base_map.padding_ratio)
 
     output_path = config.outputs.previews / f"{association_id}.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -52,27 +54,39 @@ def render_preview(association_id: str, *, config_path: Path | None = None) -> P
         associations=[selected],
         style=PREVIEW_STYLE,
         selected_id=selected.association_id,
-        bounds=selected.geometry.bounds,
+        bounds=bounds,
+        base_features=_maybe_load_basemap(config.base_map, bounds),
     )
     return output_path
 
 
-def render_regional_map(*, config_path: Path | None = None) -> Path:
+def render_regional_map(*, config_path: Path | None = None) -> list[Path]:
     config = load_project_config(path=config_path)
     associations = load_associations(config_path=config_path)
     if not associations:
         raise CivicMapBuilderError("No associations found to render.")
 
-    output_path = config.outputs.maps / "regional-boundaries.png"
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    _render_png(
-        output_path=output_path,
-        associations=associations,
-        style=REGIONAL_STYLE,
-        selected_id=None,
-        bounds=_combined_bounds([association.geometry for association in associations]),
+    default_bounds = _padded_bounds(
+        _combined_bounds([association.geometry for association in associations]),
+        config.base_map.padding_ratio,
     )
-    return output_path
+    render_targets = [("regional-boundaries", default_bounds)]
+    render_targets.extend((view.name, view.bbox) for view in config.base_map.views)
+
+    output_paths = []
+    for name, bounds in render_targets:
+        output_path = config.outputs.maps / f"{name}.png"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        _render_png(
+            output_path=output_path,
+            associations=associations,
+            style=REGIONAL_STYLE,
+            selected_id=None,
+            bounds=bounds,
+            base_features=_maybe_load_basemap(config.base_map, bounds),
+        )
+        output_paths.append(output_path)
+    return output_paths
 
 
 def stage_release_assets(
@@ -82,12 +96,15 @@ def stage_release_assets(
 ) -> Path:
     config = load_project_config(path=config_path)
     release_name = release_name or _default_release_name()
-    map_path = render_regional_map(config_path=config_path)
+    map_paths = render_regional_map(config_path=config_path)
 
     release_dir = config.outputs.release / release_name
     release_dir.mkdir(parents=True, exist_ok=True)
-    staged_map = release_dir / f"regional-boundaries-{release_name}.png"
-    shutil.copyfile(map_path, staged_map)
+    staged_maps = []
+    for map_path in map_paths:
+        staged_map = release_dir / f"{map_path.stem}-{release_name}.png"
+        shutil.copyfile(map_path, staged_map)
+        staged_maps.append(staged_map)
     (release_dir / "README.md").write_text(
         "\n".join(
             [
@@ -95,7 +112,7 @@ def stage_release_assets(
                 "",
                 "Generated release assets for manual upload to a GitHub Release.",
                 "",
-                f"- Regional map: `{staged_map.name}`",
+                *[f"- Map: `{staged_map.name}`" for staged_map in staged_maps],
                 f"- Generated at: {datetime.now(timezone.utc).isoformat()}",
                 "",
             ]
@@ -112,10 +129,13 @@ def _render_png(
     style: RenderStyle,
     selected_id: str | None,
     bounds: tuple[float, float, float, float],
+    base_features: BaseMapFeatures | None,
 ) -> None:
     image = Image.new("RGB", (style.width, style.height), style.background)
     draw = ImageDraw.Draw(image)
     transform = _make_transform(bounds, style)
+    if base_features is not None:
+        _draw_basemap(draw, base_features, transform)
 
     for association in associations:
         if selected_id is not None and association.association_id == selected_id:
@@ -140,6 +160,65 @@ def _render_png(
             _draw_label(draw, association, transform, style)
 
     image.save(output_path, format="PNG")
+
+
+def _draw_basemap(
+    draw: ImageDraw.ImageDraw,
+    features: BaseMapFeatures,
+    transform,
+) -> None:
+    for geometry in features.water:
+        _draw_area(draw, geometry, transform, fill=(209, 232, 244), outline=(164, 204, 225))
+    for geometry in features.parks:
+        _draw_area(draw, geometry, transform, fill=(222, 238, 214), outline=(184, 214, 168))
+    for line in features.rail:
+        _draw_line(draw, line, transform, fill=(100, 100, 100), width=2)
+    for line, highway in features.roads:
+        _draw_line(
+            draw,
+            line,
+            transform,
+            fill=(185, 185, 185),
+            width=_road_width(highway),
+        )
+
+
+def _draw_area(
+    draw: ImageDraw.ImageDraw,
+    geometry: BaseGeometry,
+    transform,
+    *,
+    fill: tuple[int, int, int],
+    outline: tuple[int, int, int],
+) -> None:
+    polygons = geometry.geoms if isinstance(geometry, MultiPolygon) else [geometry]
+    for polygon in polygons:
+        if isinstance(polygon, Polygon):
+            exterior = [transform(x, y) for x, y in polygon.exterior.coords]
+            draw.polygon(exterior, fill=fill, outline=outline)
+
+
+def _draw_line(
+    draw: ImageDraw.ImageDraw,
+    line: LineString,
+    transform,
+    *,
+    fill: tuple[int, int, int],
+    width: int,
+) -> None:
+    points = [transform(x, y) for x, y in line.coords]
+    if len(points) >= 2:
+        draw.line(points, fill=fill, width=width, joint="curve")
+
+
+def _road_width(highway: str) -> int:
+    if highway in {"motorway", "trunk", "primary"}:
+        return 5
+    if highway in {"secondary", "tertiary"}:
+        return 4
+    if highway == "service":
+        return 1
+    return 2
 
 
 def _draw_geometry(
@@ -198,6 +277,29 @@ def _combined_bounds(geometries: list[BaseGeometry]) -> tuple[float, float, floa
     maxx = max(geometry.bounds[2] for geometry in geometries)
     maxy = max(geometry.bounds[3] for geometry in geometries)
     return minx, miny, maxx, maxy
+
+
+def _padded_bounds(
+    bounds: tuple[float, float, float, float],
+    padding_ratio: float,
+) -> tuple[float, float, float, float]:
+    minx, miny, maxx, maxy = bounds
+    width = maxx - minx
+    height = maxy - miny
+    if width == 0 or height == 0:
+        return bounds
+    x_padding = width * padding_ratio
+    y_padding = height * padding_ratio
+    return minx - x_padding, miny - y_padding, maxx + x_padding, maxy + y_padding
+
+
+def _maybe_load_basemap(
+    config: BaseMapConfig,
+    bounds: tuple[float, float, float, float],
+) -> BaseMapFeatures | None:
+    if not config.enabled:
+        return None
+    return load_basemap_features(pbf_path=configured_pbf_path(config), bounds=bounds)
 
 
 def _default_release_name() -> str:

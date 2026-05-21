@@ -1,7 +1,7 @@
 # civic-map-builder Overview
 
 This repository collects civic association boundary contributions and renders
-simple boundary-only maps for review and publication.
+simple maps for review and publication.
 
 ## Contributor Workflow
 
@@ -43,10 +43,19 @@ civic-map-builder release-assets --release-name YYYY-MM.N
 Use date-based release names such as `2026-05.1` or `2026-05.2`, then upload the
 generated PNG assets from `outputs/release/` to a GitHub Release.
 
-## Future Base-Map Milestone
+## Optional Base Maps
 
-Version 1 intentionally does not require OpenStreetMap or any other base-map
-data. A later milestone may add optional local base layers such as roads, parks,
-county or ZIP boundaries, and labels. The earlier OSM ideas are preserved only as
-future direction; contributors and maintainers should not need OSM data for the
-initial workflow.
+Normal contribution review does not require OpenStreetMap data. Maintainers who
+want base-map context can install the optional dependencies and prepare the local
+cache:
+
+```bash
+pip install -e ".[dev,basemap]"
+civic-map-builder basemap download maryland
+```
+
+The prepared Maryland PBF is stored in the platform-appropriate user cache
+directory. District of Columbia is also available as `district-of-columbia`. Use
+`basemap use <download>` to switch between already-downloaded maps. If
+`base_map.enabled` is true without a valid `pbf_path`, preview and render commands
+fail with a configuration error.

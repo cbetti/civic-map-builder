@@ -1,7 +1,13 @@
-project_id: "example_civic_project"
-description: "Example civic association boundary contribution project."
-associations_dir: "associations"
+project_id: example_civic_project
+description: Example civic association boundary contribution project.
+associations_dir: associations
 outputs:
-  previews: "outputs/previews"
-  maps: "outputs/maps"
-  release: "outputs/release"
+  previews: outputs/previews
+  maps: outputs/maps
+  release: outputs/release
+base_map:
+  enabled: true
+  download: maryland
+  pbf_path: /home/cbetti/.cache/civic-map-builder/osm/geofabrik/maryland-latest.osm.pbf
+  padding_ratio: 0.15
+  views: {}

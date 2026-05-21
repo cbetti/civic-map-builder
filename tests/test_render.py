@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from shapely.geometry import LineString, Polygon
+
+from civic_map_builder.basemap import BaseMapFeatures
 from civic_map_builder import render
+from civic_map_builder.util import CivicMapBuilderError
 
 
 def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
@@ -11,7 +15,8 @@ def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
     _write_association(tmp_path, "beta", "Beta Association", -77.02, 39.0)
 
     preview_path = render.render_preview("alpha", config_path=config_path)
-    regional_path = render.render_regional_map(config_path=config_path)
+    regional_paths = render.render_regional_map(config_path=config_path)
+    regional_path = regional_paths[0]
 
     assert preview_path.is_file()
     assert regional_path.is_file()
@@ -19,7 +24,65 @@ def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
     assert regional_path.stat().st_size > preview_path.stat().st_size
 
 
-def _write_project_config(root: Path) -> Path:
+def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  enabled: false",
+            "  views:",
+            "    closeup:",
+            "      bbox: [-77.04, 38.99, -77.00, 39.02]",
+        ],
+    )
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+
+    regional_paths = render.render_regional_map(config_path=config_path)
+
+    assert [path.name for path in regional_paths] == [
+        "regional-boundaries.png",
+        "closeup.png",
+    ]
+    assert (tmp_path / "outputs/maps/closeup.png").is_file()
+
+
+def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    features = BaseMapFeatures(
+        roads=[(LineString([(-77.031, 39.001), (-77.025, 39.004)]), "residential")],
+        rail=[LineString([(-77.031, 39.003), (-77.025, 39.001)])],
+        water=[Polygon([(-77.031, 39.0), (-77.029, 39.0), (-77.029, 39.002), (-77.031, 39.0)])],
+        parks=[Polygon([(-77.028, 39.002), (-77.026, 39.002), (-77.026, 39.004), (-77.028, 39.002)])],
+    )
+    monkeypatch.setattr(render, "_maybe_load_basemap", lambda _config, _bounds: features)
+
+    preview_path = render.render_preview("alpha", config_path=config_path)
+
+    assert preview_path.is_file()
+    assert preview_path.stat().st_size > 1_000
+
+
+def test_enabled_basemap_requires_configured_pbf_path(tmp_path: Path) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  enabled: true",
+        ],
+    )
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+
+    try:
+        render.render_preview("alpha", config_path=config_path)
+    except CivicMapBuilderError as exc:
+        assert "base_map.pbf_path is not configured" in str(exc)
+    else:
+        raise AssertionError("Expected missing pbf_path to fail")
+
+
+def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -> Path:
+    extra_lines = extra_lines or []
     config_path = root / "civic-map-builder.project.yml"
     config_path.write_text(
         "\n".join(
@@ -30,6 +93,7 @@ def _write_project_config(root: Path) -> Path:
                 '  previews: "outputs/previews"',
                 '  maps: "outputs/maps"',
                 '  release: "outputs/release"',
+                *extra_lines,
                 "",
             ]
         ),

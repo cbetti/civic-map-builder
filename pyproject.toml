@@ -28,6 +28,11 @@ dev = [
   "pytest-cov>=5.0.0",
   "ruff>=0.6.0",
 ]
+basemap = [
+  "osmium>=4.0.0",
+  "platformdirs>=4.0.0",
+  "requests>=2.31.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -42,6 +42,8 @@ The public CLI uses direct verbs:
 - `civic-map-builder check [association_id]` validates one association or all.
 - `civic-map-builder preview <association_id>` renders a focused PNG preview.
 - `civic-map-builder render` renders the full regional PNG map.
+- `civic-map-builder basemap ...` downloads, selects, enables, and disables
+  optional OSM base maps.
 - `civic-map-builder release-assets [--release-name YYYY-MM.N]` stages files for
   manual GitHub Release upload.
 
@@ -50,9 +52,9 @@ files, bad markdown front matter, malformed GeoJSON, invalid polygon geometry,
 non-lon/lat coordinate ranges, or invalid folder names. Checks warn on maintainer
 concerns such as overlaps or suspicious boundary size.
 
-## Rendering
+## Rendering And Base Maps
 
-Version 1 renders boundary-only PNG files for broad browser compatibility:
+The default renderer writes PNG files for broad browser compatibility:
 
 - `outputs/previews/<association_id>.png`
 - `outputs/maps/regional-boundaries.png`
@@ -61,9 +63,15 @@ Version 1 renders boundary-only PNG files for broad browser compatibility:
 Generated outputs are not committed. Release names are date-based and lightweight,
 for example `2026-05.1`.
 
-## Future Base Maps
+Base-map rendering is optional. `basemap download` downloads one of the built-in
+OSM options, starting with `maryland` and `district-of-columbia`, into the
+platform-appropriate user cache and can select it for rendering.
+Rendering is controlled separately by `base_map.pbf_path`; if base maps are
+enabled, that path must point to the `.osm.pbf` file to use. This lets the cache
+contain multiple downloads while the project config selects one render source.
+Switching later uses `basemap use <download>`.
 
-The old OSM/base-map concept is deferred. A later milestone may add optional local
-base layers for roads, parks, county or ZIP boundaries, labels, or other neutral
-context. Version 1 should not require contributors or maintainers to download or
-prepare OSM data.
+Render extent defaults to current association bounds plus padding. Configured
+`base_map.views` can add fixed lon/lat bboxes, each producing a separate PNG.
+Labels and derived GIS caches are intentionally deferred until render needs are
+clearer.

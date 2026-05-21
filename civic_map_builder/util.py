@@ -22,11 +22,27 @@ class OutputDirectories:
 
 
 @dataclass(frozen=True)
+class BaseMapView:
+    name: str
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass(frozen=True)
+class BaseMapConfig:
+    enabled: bool
+    pbf_path: Path | None
+    download: str | None
+    padding_ratio: float
+    views: tuple[BaseMapView, ...]
+
+
+@dataclass(frozen=True)
 class ProjectConfig:
     project_id: str
     description: str | None
     associations_dir: Path
     outputs: OutputDirectories
+    base_map: BaseMapConfig
     project_root: Path
 
     @classmethod
@@ -66,6 +82,7 @@ class ProjectConfig:
             description=description,
             associations_dir=_resolve_path(data, "associations_dir", root, config_path),
             outputs=outputs,
+            base_map=_base_map_config(data.get("base_map"), config_path),
             project_root=root,
         )
 
@@ -110,6 +127,70 @@ def _resolve_path(
     value = data[key]
     if not isinstance(value, str):
         raise CivicMapBuilderError(f"'{key}' must be a string path in {config_path}")
+    path = Path(value)
+    if not path.is_absolute():
+        path = root / path
+    return path.resolve()
+
+
+def _base_map_config(value: Any, config_path: Path) -> BaseMapConfig:
+    if value is None:
+        value = {}
+    if not isinstance(value, Mapping):
+        raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {config_path}")
+
+    pbf_path = _optional_path(value.get("pbf_path"), config_path.parent.resolve(), config_path)
+
+    download = value.get("download")
+    if download is not None and (not isinstance(download, str) or not download.strip()):
+        raise CivicMapBuilderError(
+            f"'base_map.download' must be a non-empty string in {config_path}"
+        )
+
+    padding_ratio = value.get("padding_ratio", 0.15)
+    if not isinstance(padding_ratio, (int, float)) or padding_ratio < 0:
+        raise CivicMapBuilderError(f"'base_map.padding_ratio' must be a non-negative number in {config_path}")
+
+    views_data = value.get("views", {})
+    if views_data is None:
+        views_data = {}
+    if not isinstance(views_data, Mapping):
+        raise CivicMapBuilderError(f"'base_map.views' must be a mapping/object in {config_path}")
+
+    views = []
+    for name, view_data in views_data.items():
+        if not isinstance(name, str) or not name:
+            raise CivicMapBuilderError(f"'base_map.views' names must be non-empty strings in {config_path}")
+        views.append(BaseMapView(name=name, bbox=_bbox_from_config(view_data, config_path)))
+
+    return BaseMapConfig(
+        enabled=bool(value.get("enabled", False)),
+        pbf_path=pbf_path,
+        download=download,
+        padding_ratio=float(padding_ratio),
+        views=tuple(views),
+    )
+
+
+def _bbox_from_config(value: Any, config_path: Path) -> tuple[float, float, float, float]:
+    if not isinstance(value, Mapping):
+        raise CivicMapBuilderError(f"Each 'base_map.views' entry must be a mapping/object in {config_path}")
+    bbox = value.get("bbox")
+    if not isinstance(bbox, list) or len(bbox) != 4:
+        raise CivicMapBuilderError(f"Each 'base_map.views.*.bbox' must be a 4-number list in {config_path}")
+    if not all(isinstance(item, (int, float)) for item in bbox):
+        raise CivicMapBuilderError(f"Each 'base_map.views.*.bbox' must contain only numbers in {config_path}")
+    minx, miny, maxx, maxy = (float(item) for item in bbox)
+    if minx >= maxx or miny >= maxy:
+        raise CivicMapBuilderError(f"Each 'base_map.views.*.bbox' must be [min_lon, min_lat, max_lon, max_lat] in {config_path}")
+    return minx, miny, maxx, maxy
+
+
+def _optional_path(value: Any, root: Path, config_path: Path) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise CivicMapBuilderError(f"'base_map.pbf_path' must be a non-empty string path in {config_path}")
     path = Path(value)
     if not path.is_absolute():
         path = root / path
