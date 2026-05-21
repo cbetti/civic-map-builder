@@ -53,6 +53,7 @@ class BaseMapFeatures:
     rail: list[LineString] = field(default_factory=list)
     water: list[BaseGeometry] = field(default_factory=list)
     parks: list[BaseGeometry] = field(default_factory=list)
+    buildings: list[BaseGeometry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -359,6 +360,8 @@ def _handle_area(
         features.water.append(clipped)
     if _is_park(tags):
         features.parks.append(clipped)
+    if _is_building(tags):
+        features.buildings.append(clipped)
 
 
 def _tags_dict(tags: Any) -> dict[str, str]:
@@ -454,6 +457,10 @@ def _is_park(tags: dict[str, str]) -> bool:
         or tags.get("landuse") in PARK_LANDUSE_TAGS
         or tags.get("natural") in PARK_NATURAL_TAGS
     )
+
+
+def _is_building(tags: dict[str, str]) -> bool:
+    return tags.get("building") not in {None, "no"}
 
 
 def copy_for_tests(source: Path, target: Path) -> None:
