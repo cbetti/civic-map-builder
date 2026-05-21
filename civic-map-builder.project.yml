@@ -1,0 +1,7 @@
+project_id: "example_civic_project"
+description: "Example civic association boundary contribution project."
+associations_dir: "associations"
+outputs:
+  previews: "outputs/previews"
+  maps: "outputs/maps"
+  release: "outputs/release"

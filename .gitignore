@@ -1,0 +1,8 @@
+/.venv/
+/.idea/
+/civic_map_builder.egg-info/
+/.venv-wsl/
+__pycache__/
+*.py[cod]
+/data/user_files/
+/outputs/
