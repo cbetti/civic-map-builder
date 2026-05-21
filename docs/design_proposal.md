@@ -64,12 +64,17 @@ Generated outputs are not committed. Release names are date-based and lightweigh
 for example `2026-05.1`.
 
 Base-map rendering is optional. `basemap download` downloads one of the built-in
-OSM options, starting with `maryland` and `district-of-columbia`, into the
-platform-appropriate user cache and can select it for rendering.
+regional OSM options, starting with `maryland` and `district-of-columbia`, into
+the platform-appropriate user cache. `basemap extract` creates a smaller
+project-local extract from the configured regional PBF and can select it for
+rendering.
 Rendering is controlled separately by `base_map.pbf_path`; if base maps are
 enabled, that path must point to the `.osm.pbf` file to use. This lets the cache
-contain multiple downloads while the project config selects one render source.
-Switching later uses `basemap use <download>`.
+contain multiple regional downloads and generated project extracts while the
+project config selects one render source. Switching later uses
+`basemap use extract`, `basemap use <download>`, or a manual `base_map.pbf_path`
+edit. Extraction input selection prefers the configured `base_map.download`
+cache, so re-extracting does not use a previous generated extract as the source.
 
 Render extent defaults to current association bounds plus padding. Configured
 `base_map.views` can add fixed lon/lat bboxes, each producing a separate PNG.

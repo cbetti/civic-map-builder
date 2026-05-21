@@ -52,10 +52,18 @@ cache:
 ```bash
 pip install -e ".[dev,basemap]"
 civic-map-builder basemap download maryland
+civic-map-builder basemap extract
+civic-map-builder render
 ```
 
-The prepared Maryland PBF is stored in the platform-appropriate user cache
-directory. District of Columbia is also available as `district-of-columbia`. Use
-`basemap use <download>` to switch between already-downloaded maps. If
-`base_map.enabled` is true without a valid `pbf_path`, preview and render commands
-fail with a configuration error.
+`basemap download` stores a regional PBF in the platform-appropriate user cache.
+District of Columbia is also available as `district-of-columbia`. `basemap
+extract` creates a smaller project-local PBF for fast rendering and can set
+`base_map.pbf_path` to that extract. `render` reads whichever PBF path is
+configured. Re-running `basemap extract` uses the cached regional download when
+`base_map.download` is set, not the currently selected generated extract.
+Use `basemap use extract` to switch rendering back to the project extract or
+`basemap use <download>` to switch to a regional cache; omitting the source
+prompts with available choices. Advanced custom PBF paths remain a manual config
+option. If `base_map.enabled` is true without a valid `pbf_path`, preview and
+render commands fail with a configuration error.

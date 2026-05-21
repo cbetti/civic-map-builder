@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import shutil
+import subprocess
 from importlib.util import find_spec
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 
 from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
-from .util import BaseMapConfig, CivicMapBuilderError, load_project_config
+from .associations import Association, load_associations
+from .util import BaseMapConfig, CivicMapBuilderError, ProjectConfig, load_project_config
 import yaml
 
 APP_NAME = "civic-map-builder"
@@ -61,6 +63,14 @@ class PreparedBaseMap:
     downloaded: bool
 
 
+@dataclass(frozen=True)
+class ExtractedBaseMap:
+    input_path: Path
+    output_path: Path
+    bbox: tuple[float, float, float, float]
+    command: tuple[str, ...]
+
+
 def default_cache_root() -> Path:
     try:
         from platformdirs import user_cache_path
@@ -84,6 +94,120 @@ def pbf_cache_path(download: str, cache_root: Path | None = None) -> Path:
     option = _download_option(download)
     root = cache_root or default_cache_root()
     return root / "osm" / "geofabrik" / option["filename"]
+
+
+def project_extract_path(project_id: str, cache_root: Path | None = None) -> Path:
+    root = cache_root or default_cache_root()
+    return root / "osm" / "extracts" / f"{project_id}-basemap.osm.pbf"
+
+
+def extraction_source_path(config: ProjectConfig, cache_root: Path | None = None) -> Path:
+    if config.base_map.download is not None:
+        download_path = pbf_cache_path(config.base_map.download, cache_root=cache_root)
+        if download_path.is_file():
+            return download_path
+        if config.base_map.pbf_path is not None and not _is_extract_path(
+            config.base_map.pbf_path,
+            cache_root=cache_root,
+        ):
+            return _existing_pbf_path(config.base_map.pbf_path)
+        raise CivicMapBuilderError(
+            f"Cached regional PBF not found: {download_path}. "
+            f"Run 'civic-map-builder basemap download {config.base_map.download}' first."
+        )
+
+    if config.base_map.pbf_path is None:
+        raise CivicMapBuilderError(
+            "base_map.pbf_path is not configured. "
+            "Run 'civic-map-builder basemap download <download>' first."
+        )
+    if _is_extract_path(config.base_map.pbf_path, cache_root=cache_root):
+        raise CivicMapBuilderError(
+            "base_map.pbf_path points to a generated project extract, not a regional source PBF. "
+            "Configure base_map.download or set base_map.pbf_path to a regional .osm.pbf before extracting."
+        )
+    return _existing_pbf_path(config.base_map.pbf_path)
+
+
+def extraction_bbox(
+    associations: Sequence[Association],
+    padding_ratio: float,
+) -> tuple[float, float, float, float]:
+    if not associations:
+        raise CivicMapBuilderError("No associations found for base-map extraction.")
+    return _padded_bounds(
+        _combined_bounds([association.geometry for association in associations]),
+        padding_ratio,
+    )
+
+
+def format_bbox(bounds: tuple[float, float, float, float]) -> str:
+    return ",".join(f"{value:.8f}".rstrip("0").rstrip(".") for value in bounds)
+
+
+def build_extract_command(
+    *,
+    osmium_path: str,
+    bounds: tuple[float, float, float, float],
+    input_path: Path,
+    output_path: Path,
+) -> tuple[str, ...]:
+    return (
+        osmium_path,
+        "extract",
+        "--bbox",
+        format_bbox(bounds),
+        str(input_path),
+        "-o",
+        str(output_path),
+        "--overwrite",
+    )
+
+
+def extract_basemap(
+    *,
+    config_path: Path | None = None,
+    cache_root: Path | None = None,
+    command_runner: Callable[..., Any] | None = None,
+) -> ExtractedBaseMap:
+    config = load_project_config(path=config_path)
+    input_path = extraction_source_path(config, cache_root=cache_root)
+
+    osmium_path = shutil.which("osmium")
+    if osmium_path is None:
+        raise CivicMapBuilderError(
+            "The 'osmium' CLI is required for base-map extraction.\n"
+            "Install hints:\n"
+            "- Linux: sudo apt install osmium-tool\n"
+            "- macOS: brew install osmium-tool\n"
+            "- Windows: use WSL or install osmium-tool manually."
+        )
+
+    associations = load_associations(config_path=config_path)
+    bounds = extraction_bbox(associations, config.base_map.padding_ratio)
+    output_path = project_extract_path(config.project_id, cache_root=cache_root)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    command = build_extract_command(
+        osmium_path=osmium_path,
+        bounds=bounds,
+        input_path=input_path,
+        output_path=output_path,
+    )
+    runner = command_runner or subprocess.run
+    try:
+        runner(list(command), check=True)
+    except subprocess.CalledProcessError as exc:
+        raise CivicMapBuilderError(f"osmium extract failed with exit code {exc.returncode}.") from exc
+    except OSError as exc:
+        raise CivicMapBuilderError(f"Failed to run osmium extract: {exc}") from exc
+    if not output_path.is_file():
+        raise CivicMapBuilderError(f"osmium extract did not create expected output: {output_path}")
+    return ExtractedBaseMap(
+        input_path=input_path,
+        output_path=output_path,
+        bbox=bounds,
+        command=command,
+    )
 
 
 def prepare_basemap(
@@ -273,6 +397,41 @@ def _polygon_from_area(area: Any) -> Polygon | None:
 
 def _intersects_bounds(geometry: BaseGeometry, bounds: tuple[float, float, float, float]) -> bool:
     return geometry.intersects(box(*bounds))
+
+
+def _existing_pbf_path(path: Path) -> Path:
+    if not path.is_file():
+        raise CivicMapBuilderError(f"Configured base_map.pbf_path does not exist: {path}")
+    return path
+
+
+def _is_extract_path(path: Path, cache_root: Path | None = None) -> bool:
+    root = cache_root or default_cache_root()
+    try:
+        path.resolve().relative_to((root / "osm" / "extracts").resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _combined_bounds(geometries: Sequence[BaseGeometry]) -> tuple[float, float, float, float]:
+    minx = min(geometry.bounds[0] for geometry in geometries)
+    miny = min(geometry.bounds[1] for geometry in geometries)
+    maxx = max(geometry.bounds[2] for geometry in geometries)
+    maxy = max(geometry.bounds[3] for geometry in geometries)
+    return minx, miny, maxx, maxy
+
+
+def _padded_bounds(
+    bounds: tuple[float, float, float, float],
+    padding_ratio: float,
+) -> tuple[float, float, float, float]:
+    minx, miny, maxx, maxy = bounds
+    width = maxx - minx
+    height = maxy - miny
+    padding_x = width * padding_ratio
+    padding_y = height * padding_ratio
+    return minx - padding_x, miny - padding_y, maxx + padding_x, maxy + padding_y
 
 
 def _line_parts(geometry: BaseGeometry) -> list[LineString]:

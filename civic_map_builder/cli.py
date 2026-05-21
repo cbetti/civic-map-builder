@@ -5,12 +5,17 @@ import typer
 
 from . import __version__
 from . import render
-from .associations import check_associations, create_association
+from .associations import check_associations, create_association, load_associations
 from .basemap import (
     available_downloads,
     download_label,
+    extract_basemap,
+    extraction_bbox,
+    extraction_source_path,
+    format_bbox,
     pbf_cache_path,
     prepare_basemap,
+    project_extract_path,
     update_base_map_config,
 )
 from .util import load_project_config
@@ -152,6 +157,47 @@ def _prompt_download() -> str:
     )
 
 
+def _prompt_basemap_source() -> str:
+    config = load_project_config()
+    choices = []
+    extract_path = project_extract_path(config.project_id)
+    if extract_path.is_file():
+        typer.echo(f"- extract: Project extract ({extract_path})")
+        choices.append("extract")
+    for download in available_downloads():
+        typer.echo(f"- {download}: {download_label(download)}")
+        choices.append(download)
+    return typer.prompt(
+        "Select base map",
+        type=click.Choice(choices, case_sensitive=False),
+        show_choices=True,
+    )
+
+
+@basemap_app.command("extract")
+def basemap_extract() -> None:
+    """Create a project-specific OSM PBF extract for faster rendering."""
+    try:
+        config = load_project_config()
+        input_path = extraction_source_path(config)
+        bounds = extraction_bbox(load_associations(), config.base_map.padding_ratio)
+        output_path = project_extract_path(config.project_id)
+        typer.echo(f"BBox: {format_bbox(bounds)}")
+        typer.echo(f"Input: {input_path}")
+        typer.echo(f"Output: {output_path}")
+        extracted = extract_basemap()
+    except CivicMapBuilderError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo(f"Wrote {extracted.output_path}")
+    if typer.confirm("Use this extracted base map for rendering?", default=True):
+        update_base_map_config(enabled=True, pbf_path=extracted.output_path)
+        typer.echo(f"Enabled base maps using {extracted.output_path}.")
+    else:
+        typer.echo("Base-map config unchanged.")
+
+
 @basemap_app.command("status")
 def basemap_status() -> None:
     """Show current base-map config."""
@@ -178,17 +224,37 @@ def _show_basemap_status() -> None:
 
 @basemap_app.command("use")
 def basemap_use(
-    download: str | None = typer.Argument(
+    source: str | None = typer.Argument(
         None,
-        help="Download option, e.g. maryland. Prompts if omitted.",
+        help="Base-map source, e.g. extract or maryland. Prompts if omitted.",
     ),
 ) -> None:
     """Use an already cached base map for rendering."""
     try:
-        _use_cached_basemap(download or _prompt_download())
+        _use_basemap_source(source or _prompt_basemap_source())
     except CivicMapBuilderError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
+
+
+def _use_basemap_source(source: str) -> None:
+    source = source.lower()
+    if source == "extract":
+        _use_project_extract()
+    else:
+        _use_cached_basemap(source)
+
+
+def _use_project_extract() -> None:
+    config = load_project_config()
+    extract_path = project_extract_path(config.project_id)
+    if not extract_path.is_file():
+        raise CivicMapBuilderError(
+            f"Project extract not found: {extract_path}. "
+            "Run 'civic-map-builder basemap extract' first."
+        )
+    update_base_map_config(enabled=True, pbf_path=extract_path)
+    typer.echo(f"Enabled base maps using {extract_path}.")
 
 
 def _use_cached_basemap(download: str) -> None:

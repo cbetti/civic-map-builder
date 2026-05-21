@@ -1,4 +1,4 @@
-project_id: example_civic_project
+project_id: montgomery_county_area_associations
 description: Example civic association boundary contribution project.
 associations_dir: associations
 outputs:
@@ -8,6 +8,6 @@ outputs:
 base_map:
   enabled: true
   download: maryland
-  pbf_path: /home/cbetti/.cache/civic-map-builder/osm/geofabrik/maryland-latest.osm.pbf
+  pbf_path: /home/cbetti/.cache/civic-map-builder/osm/extracts/montgomery_county_area_associations-basemap.osm.pbf
   padding_ratio: 0.15
   views: {}

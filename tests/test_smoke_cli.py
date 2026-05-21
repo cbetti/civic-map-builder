@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
@@ -70,6 +71,13 @@ def test_basemap_status_and_off_smoke() -> None:
         assert off_result.exit_code == 0
 
 
+def test_basemap_extract_help_runs() -> None:
+    result = runner.invoke(app, ["basemap", "extract", "--help"])
+
+    assert result.exit_code == 0
+    assert "faster rendering" in result.stdout
+
+
 def test_basemap_download_cached_yes_updates_config(monkeypatch, tmp_path: Path) -> None:
     with runner.isolated_filesystem():
         _write_project_config()
@@ -118,6 +126,64 @@ def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) ->
         assert "enabled: true" in config_text
 
 
+def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        extract_path = tmp_path / "test_project-basemap.osm.pbf"
+        extract_path.write_bytes(b"extract")
+        _write_project_config(
+            extra_lines=[
+                "base_map:",
+                "  download: maryland",
+            ]
+        )
+        monkeypatch.setattr(
+            "civic_map_builder.cli.project_extract_path",
+            lambda _project_id: extract_path,
+        )
+
+        result = runner.invoke(app, ["basemap", "use", "extract"])
+
+        assert result.exit_code == 0
+        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        assert "download: maryland" in config_text
+        assert "pbf_path: " + str(extract_path) in config_text
+        assert "enabled: true" in config_text
+
+
+def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        extract_path = tmp_path / "test_project-basemap.osm.pbf"
+        extract_path.write_bytes(b"extract")
+        _write_project_config()
+        monkeypatch.setattr(
+            "civic_map_builder.cli.project_extract_path",
+            lambda _project_id: extract_path,
+        )
+
+        result = runner.invoke(app, ["basemap", "use"], input="extract\n")
+
+        assert result.exit_code == 0
+        assert "- extract: Project extract" in result.stdout
+        assert "Select base map (extract, district-of-columbia, maryland)" in result.stdout
+        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        assert "pbf_path: " + str(extract_path) in config_text
+
+
+def test_basemap_use_extract_fails_when_project_extract_missing(monkeypatch, tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        missing_path = tmp_path / "missing-basemap.osm.pbf"
+        _write_project_config()
+        monkeypatch.setattr(
+            "civic_map_builder.cli.project_extract_path",
+            lambda _project_id: missing_path,
+        )
+
+        result = runner.invoke(app, ["basemap", "use", "extract"])
+
+        assert result.exit_code == 1
+        assert "Project extract not found" in result.stderr
+
+
 def test_basemap_use_fails_when_cached_file_missing(monkeypatch, tmp_path: Path) -> None:
     with runner.isolated_filesystem():
         _write_project_config()
@@ -130,7 +196,71 @@ def test_basemap_use_fails_when_cached_file_missing(monkeypatch, tmp_path: Path)
         assert "Cached PBF not found" in result.stderr
 
 
-def _write_project_config() -> None:
+def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        input_path = tmp_path / "maryland-latest.osm.pbf"
+        input_path.write_bytes(b"pbf")
+        extract_path = tmp_path / "test_project-basemap.osm.pbf"
+        extract_path.write_bytes(b"extract")
+        _write_project_config(
+            extra_lines=[
+                "base_map:",
+                f"  pbf_path: {input_path}",
+            ]
+        )
+        _write_association("alpha", "Alpha Association", -77.03, 39.0)
+        monkeypatch.setattr(
+            "civic_map_builder.cli.project_extract_path",
+            lambda _project_id: extract_path,
+        )
+        monkeypatch.setattr(
+            "civic_map_builder.cli.extract_basemap",
+            lambda: SimpleNamespace(output_path=extract_path),
+        )
+
+        result = runner.invoke(app, ["basemap", "extract"], input="y\n")
+
+        assert result.exit_code == 0
+        assert "BBox:" in result.stdout
+        assert "Input: " + str(input_path) in result.stdout
+        assert "Output: " + str(extract_path) in result.stdout
+        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        assert "enabled: true" in config_text
+        assert "pbf_path: " + str(extract_path) in config_text
+
+
+def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> None:
+    with runner.isolated_filesystem():
+        input_path = tmp_path / "maryland-latest.osm.pbf"
+        input_path.write_bytes(b"pbf")
+        extract_path = tmp_path / "test_project-basemap.osm.pbf"
+        _write_project_config(
+            extra_lines=[
+                "base_map:",
+                f"  pbf_path: {input_path}",
+            ]
+        )
+        _write_association("alpha", "Alpha Association", -77.03, 39.0)
+        monkeypatch.setattr(
+            "civic_map_builder.cli.project_extract_path",
+            lambda _project_id: extract_path,
+        )
+        monkeypatch.setattr(
+            "civic_map_builder.cli.extract_basemap",
+            lambda: SimpleNamespace(output_path=extract_path),
+        )
+
+        result = runner.invoke(app, ["basemap", "extract"], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Base-map config unchanged." in result.stdout
+        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        assert "pbf_path: " + str(input_path) in config_text
+        assert "pbf_path: " + str(extract_path) not in config_text
+
+
+def _write_project_config(*, extra_lines: list[str] | None = None) -> None:
+    extra_lines = extra_lines or []
     Path("civic-map-builder.project.yml").write_text(
         "\n".join(
             [
@@ -140,6 +270,7 @@ def _write_project_config() -> None:
                 '  previews: "outputs/previews"',
                 '  maps: "outputs/maps"',
                 '  release: "outputs/release"',
+                *extra_lines,
                 "",
             ]
         ),
