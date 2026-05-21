@@ -22,6 +22,8 @@ def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
     assert regional_path.is_file()
     assert preview_path.stat().st_size > 1_000
     assert regional_path.stat().st_size > preview_path.stat().st_size
+    assert not preview_path.with_suffix(".txt").exists()
+    assert not regional_path.with_suffix(".txt").exists()
 
 
 def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
@@ -61,6 +63,11 @@ def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch)
 
     assert preview_path.is_file()
     assert preview_path.stat().st_size > 1_000
+    attribution_path = preview_path.with_suffix(".txt")
+    assert attribution_path.read_text(encoding="utf8") == (
+        "Map data: OpenStreetMap contributors (ODbL 1.0). "
+        "Regional extracts from Geofabrik.\n"
+    )
 
 
 def test_enabled_basemap_requires_configured_pbf_path(tmp_path: Path) -> None:

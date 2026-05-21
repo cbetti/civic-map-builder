@@ -3,8 +3,6 @@
 A CLI tool to turn civic association boundary descriptions (bylaws, official text, etc.)
 and contributor-supplied GeoJSON coordinates into reviewable boundary maps.
 
-**Status:** early skeleton / work in progress.
-
 ## Setup
 
 This project is intended to be run from a cloned git checkout, not installed as a

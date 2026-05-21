@@ -14,6 +14,11 @@ from .associations import Association, load_association, load_associations
 from .basemap import BaseMapFeatures, configured_pbf_path, load_basemap_features
 from .util import BaseMapConfig, CivicMapBuilderError, load_project_config
 
+BASEMAP_ATTRIBUTION = (
+    "Map data: OpenStreetMap contributors (ODbL 1.0). "
+    "Regional extracts from Geofabrik."
+)
+
 
 @dataclass(frozen=True)
 class RenderStyle:
@@ -181,6 +186,16 @@ def _render_png(
     if pixel_scale > 1:
         image = image.resize((style.width, style.height), Image.Resampling.LANCZOS)
     image.save(output_path, format="PNG")
+    _write_attribution(output_path, base_features=base_features)
+
+
+def _write_attribution(output_path: Path, *, base_features: BaseMapFeatures | None) -> None:
+    attribution_path = output_path.with_suffix(".txt")
+    if base_features is None:
+        if attribution_path.exists():
+            attribution_path.unlink()
+        return
+    attribution_path.write_text(BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
 
 
 def _scaled_style(style: RenderStyle, pixel_scale: int) -> RenderStyle:
