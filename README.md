@@ -64,6 +64,9 @@ Each association contributes two files:
 - `associations/<association_id>/boundary.geojson` for WGS84 lon/lat boundary
   coordinates.
 
+See `associations/sample__blair_highschool/` for a compact example, including a
+GeoJSON polygon with an interior exclusion/hole.
+
 Rendered PNGs are generated under `outputs/` and are not committed. Run commands
 from the repository root so `civic-map-builder.project.yml` resolves as expected.
 For workflow details, see `docs/overview.md`.
