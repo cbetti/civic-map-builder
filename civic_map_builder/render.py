@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import math
 import shutil
+import zlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 from shapely.geometry import LineString, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
@@ -30,10 +31,13 @@ class RenderStyle:
     outline_width: int = 1
     outline_halo: tuple[int, int, int] | None = None
     outline_halo_width: int = 0
+    fill_opacity: int = 255
+    color_by_association: bool = False
     background: tuple[int, int, int] = (255, 255, 255)
     context_fill: tuple[int, int, int] = (230, 230, 230)
     context_outline: tuple[int, int, int] = (170, 170, 170)
     show_labels: bool = True
+    label_size: int = 20
     render_scale: int = 1
 
 
@@ -46,6 +50,8 @@ PREVIEW_STYLE = RenderStyle(
     outline_width=2,
     outline_halo=(255, 255, 255),
     outline_halo_width=4,
+    fill_opacity=28,
+    color_by_association=True,
     background=(250, 250, 250),
     show_labels=False,
     render_scale=2,
@@ -54,8 +60,22 @@ REGIONAL_STYLE = RenderStyle(
     width=3600,
     height=3000,
     padding=160,
-    fill=(119, 172, 112),
+    fill=None,
     outline=(44, 98, 52),
+    fill_opacity=70,
+    color_by_association=True,
+    label_size=40,
+)
+
+POLYGON_PALETTE = (
+    (83, 137, 214),
+    (105, 169, 104),
+    (219, 141, 74),
+    (151, 111, 195),
+    (213, 104, 125),
+    (71, 166, 174),
+    (188, 157, 61),
+    (121, 145, 205),
 )
 
 
@@ -150,42 +170,49 @@ def _render_png(
 ) -> None:
     pixel_scale = style.render_scale
     draw_style = _scaled_style(style, pixel_scale)
-    image = Image.new("RGB", (draw_style.width, draw_style.height), style.background)
+    image = Image.new("RGBA", (draw_style.width, draw_style.height), (*style.background, 255))
     draw = ImageDraw.Draw(image)
     transform = _make_transform(bounds, draw_style)
     if base_features is not None:
         _draw_basemap(draw, base_features, transform, pixel_scale=pixel_scale)
 
-    for association in associations:
+    for index, association in enumerate(associations):
         if selected_id is not None and association.association_id == selected_id:
             continue
+        fill = _association_fill(association, index, style)
         _draw_geometry(
+            image,
             draw,
             association.geometry,
             transform,
-            fill=style.context_fill,
+            fill=fill,
             outline=style.context_outline,
             width=pixel_scale,
+            fill_opacity=max(18, style.fill_opacity // 2),
         )
 
-    for association in associations:
+    for index, association in enumerate(associations):
         if selected_id is None or association.association_id == selected_id:
+            fill = _association_fill(association, index, style)
+            outline = _association_outline(fill) if style.color_by_association else style.outline
             _draw_geometry(
+                image,
                 draw,
                 association.geometry,
                 transform,
-                fill=style.fill,
-                outline=style.outline,
+                fill=fill,
+                outline=outline,
                 width=draw_style.outline_width,
                 halo=style.outline_halo,
                 halo_width=draw_style.outline_halo_width,
+                fill_opacity=style.fill_opacity,
             )
             if style.show_labels:
                 _draw_label(draw, association, transform, draw_style)
 
     if pixel_scale > 1:
         image = image.resize((style.width, style.height), Image.Resampling.LANCZOS)
-    image.save(output_path, format="PNG")
+    image.convert("RGB").save(output_path, format="PNG")
     _write_attribution(output_path, base_features=base_features)
 
 
@@ -210,10 +237,13 @@ def _scaled_style(style: RenderStyle, pixel_scale: int) -> RenderStyle:
         outline_width=style.outline_width * pixel_scale,
         outline_halo=style.outline_halo,
         outline_halo_width=style.outline_halo_width * pixel_scale,
+        fill_opacity=style.fill_opacity,
+        color_by_association=style.color_by_association,
         background=style.background,
         context_fill=style.context_fill,
         context_outline=style.context_outline,
         show_labels=style.show_labels,
+        label_size=style.label_size * pixel_scale,
         render_scale=1,
     )
 
@@ -297,7 +327,27 @@ def _road_color(highway: str) -> tuple[int, int, int]:
     return 220, 220, 220
 
 
+def _association_fill(
+    association: Association,
+    index: int,
+    style: RenderStyle,
+) -> tuple[int, int, int] | None:
+    if not style.color_by_association:
+        return style.fill
+    palette_index = (zlib.crc32(association.association_id.encode("utf8")) + index) % len(
+        POLYGON_PALETTE
+    )
+    return POLYGON_PALETTE[palette_index]
+
+
+def _association_outline(fill: tuple[int, int, int] | None) -> tuple[int, int, int]:
+    if fill is None:
+        return 28, 32, 88
+    return tuple(max(35, int(channel * 0.42)) for channel in fill)
+
+
 def _draw_geometry(
+    image: Image.Image,
     draw: ImageDraw.ImageDraw,
     geometry: BaseGeometry,
     transform,
@@ -307,6 +357,7 @@ def _draw_geometry(
     width: int = 1,
     halo: tuple[int, int, int] | None = None,
     halo_width: int = 0,
+    fill_opacity: int = 255,
 ) -> None:
     polygons = geometry.geoms if isinstance(geometry, MultiPolygon) else [geometry]
     for polygon in polygons:
@@ -314,7 +365,7 @@ def _draw_geometry(
             continue
         exterior = [transform(x, y) for x, y in polygon.exterior.coords]
         if fill is not None:
-            draw.polygon(exterior, fill=fill)
+            _draw_transparent_polygon(image, exterior, fill, fill_opacity)
         if halo is not None and halo_width > width:
             draw.line(exterior, fill=halo, width=halo_width, joint="curve")
         draw.line(exterior, fill=outline, width=width, joint="curve")
@@ -326,6 +377,18 @@ def _draw_geometry(
             draw.line(hole, fill=outline, width=width, joint="curve")
 
 
+def _draw_transparent_polygon(
+    image: Image.Image,
+    exterior: list[tuple[float, float]],
+    fill: tuple[int, int, int],
+    opacity: int,
+) -> None:
+    overlay = Image.new("RGBA", image.size, (255, 255, 255, 0))
+    overlay_draw = ImageDraw.Draw(overlay)
+    overlay_draw.polygon(exterior, fill=(*fill, opacity))
+    image.alpha_composite(overlay)
+
+
 def _draw_label(
     draw: ImageDraw.ImageDraw,
     association: Association,
@@ -335,7 +398,61 @@ def _draw_label(
     point = association.geometry.representative_point()
     x, y = transform(point.x, point.y)
     label = association.name
-    draw.text((x + 8, y - 8), label, fill=(20, 20, 20))
+    font = _label_font(style.label_size)
+    max_width = _label_max_width(association.geometry, transform)
+    lines = _wrap_label(draw, label, font, max_width)
+    line_boxes = [draw.textbbox((0, 0), line, font=font) for line in lines]
+    line_heights = [box[3] - box[1] for box in line_boxes]
+    line_spacing = max(4, style.label_size // 5)
+    text_height = sum(line_heights) + (line_spacing * (len(lines) - 1))
+    text_y = y - (text_height / 2)
+    cursor_y = text_y
+    for line, box, line_height in zip(lines, line_boxes, line_heights):
+        line_width = box[2] - box[0]
+        draw.text((x - (line_width / 2), cursor_y), line, fill=(20, 20, 20), font=font)
+        cursor_y += line_height + line_spacing
+
+
+def _label_max_width(geometry: BaseGeometry, transform) -> int:
+    minx, _miny, maxx, _maxy = geometry.bounds
+    left, _ = transform(minx, _miny)
+    right, _ = transform(maxx, _maxy)
+    return max(120, int(abs(right - left) * 0.72))
+
+
+def _wrap_label(
+    draw: ImageDraw.ImageDraw,
+    label: str,
+    font: ImageFont.ImageFont,
+    max_width: int,
+) -> list[str]:
+    words = label.split()
+    if not words:
+        return [label]
+
+    lines: list[str] = []
+    current = words[0]
+    for word in words[1:]:
+        candidate = f"{current} {word}"
+        if _text_width(draw, candidate, font) <= max_width:
+            current = candidate
+        else:
+            lines.append(current)
+            current = word
+    lines.append(current)
+    return lines
+
+
+def _text_width(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont) -> int:
+    box = draw.textbbox((0, 0), text, font=font)
+    return box[2] - box[0]
+
+
+def _label_font(size: int) -> ImageFont.ImageFont:
+    try:
+        return ImageFont.truetype("DejaVuSans.ttf", size=size)
+    except OSError:
+        return ImageFont.load_default()
 
 
 def _make_transform(bounds: tuple[float, float, float, float], style: RenderStyle):
