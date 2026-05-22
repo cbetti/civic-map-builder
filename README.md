@@ -70,3 +70,21 @@ GeoJSON polygon with an interior exclusion/hole.
 Rendered PNGs are generated under `outputs/` and are not committed. Run commands
 from the repository root so `civic-map-builder.project.yml` resolves as expected.
 For workflow details, see `docs/overview.md`.
+
+## Licensing
+
+This project uses a hybrid model to keep the tooling open and the data completely
+unrestricted:
+
+* **Software & Tooling:** All Python source code (`civic_map_builder/`), CLI scripts,
+  configuration workflows, and tests are licensed under the **MIT License**. See the
+  [LICENSE](LICENSE) file for details.
+* **Geospatial Data:** All GeoJSON boundaries and metadata located within the
+  `associations/` directory are dedicated to the public domain under the **Creative
+  Commons Zero (CC0 1.0 Universal)** dedication. You are completely free to use, modify,
+  and distribute this data without any legal restrictions or attribution requirements.
+
+*Note: While credit is legally not required under CC0, we kindly request a link back to
+this repository if you use our maps. This helps other local organizations discover the
+project and contribute back to keep our regional data accurate!*
+
