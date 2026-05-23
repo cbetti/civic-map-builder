@@ -6,8 +6,6 @@ outputs:
   maps: outputs/maps
   release: outputs/release
 base_map:
-  enabled: true
   download: maryland
-  pbf_path: /home/cbetti/.cache/civic-map-builder/osm/extracts/montgomery_county_area_associations-basemap.osm.pbf
   padding_ratio: 0.15
   views: {}

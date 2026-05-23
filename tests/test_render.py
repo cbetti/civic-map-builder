@@ -90,7 +90,8 @@ def test_enabled_basemap_requires_configured_pbf_path(tmp_path: Path) -> None:
 
 def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -> Path:
     extra_lines = extra_lines or []
-    config_path = root / "civic-map-builder.project.yml"
+    config_path = root / "config/project.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
             [

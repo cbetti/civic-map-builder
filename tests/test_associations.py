@@ -98,7 +98,8 @@ def test_check_warns_on_overlap_without_failing(tmp_path: Path) -> None:
 
 
 def _write_project_config(root: Path) -> Path:
-    config_path = root / "civic-map-builder.project.yml"
+    config_path = root / "config/project.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
             [

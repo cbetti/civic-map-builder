@@ -1,14 +1,13 @@
 # civic-map-builder
 
-A CLI tool to turn civic association boundary descriptions (bylaws, official text, etc.)
-and contributor-supplied GeoJSON coordinates into reviewable boundary maps.
+A repo-local CLI and Montgomery County-area boundary dataset for turning civic
+association source text and GeoJSON coordinates into reviewable PNG maps.
 
-## Setup
+This repository is both a Python tool and a data project. Contributors can add or
+improve boundaries under `associations/`; other groups can reuse the tool with
+their own association data.
 
-This project is intended to be run from a cloned git checkout, not installed as a
-distributed package. The supported local workflow is a repo-local virtual
-environment with an editable install, which installs dependencies, dev tools, and
-the `civic-map-builder` command while keeping it pointed at the checked-out source.
+## Quick Start
 
 ```bash
 git clone <repo-url>
@@ -16,26 +15,37 @@ cd civic-map-builder
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+civic-map-builder check
+civic-map-builder render
 ```
 
-## Usage
+Useful commands:
 
 ```bash
-civic-map-builder --help
 civic-map-builder new example_association
 civic-map-builder check example_association
 civic-map-builder preview example_association
 civic-map-builder render
-civic-map-builder version
+civic-map-builder release-assets --release-name YYYY-MM.N
 pytest
 ruff check civic_map_builder tests
 ```
 
-## Base-Map Enhancement
+## Boundary Data
 
-The normal workflow renders faster boundary-only maps. To render with OSM context
-behind the boundaries, install the optional dependencies, download a regional
-PBF, create a smaller project extract, and render:
+Each association has one folder under `associations/` with:
+
+- `boundary.md` for the association name, source link, and boundary text.
+- `boundary.geojson` for WGS84 longitude/latitude boundary coordinates.
+
+See `associations/sample__blair_highschool/` for an example, including a GeoJSON
+polygon with an interior exclusion/hole. For contribution steps, GeoJSON
+expectations, and source policy, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Optional Base Maps
+
+Boundary-only rendering works without OpenStreetMap data. To render with OSM
+context:
 
 ```bash
 pip install -e ".[dev,basemap]"
@@ -44,32 +54,14 @@ civic-map-builder basemap extract
 civic-map-builder render
 ```
 
-`basemap download` downloads one of the built-in regional OSM options, currently
-`maryland` or `district-of-columbia`, into the platform cache. `basemap extract`
-uses that configured regional PBF to create a much smaller project-local extract
-for fast rendering, then asks whether to set `base_map.pbf_path` to the extract.
-When `base_map.download` is set, later `basemap extract` runs continue to use the
-cached regional download as the extraction source, even if rendering currently
-points at a generated extract. `render` reads whichever `.osm.pbf` path is
-configured. Switch render sources with `civic-map-builder basemap use extract`
-or `civic-map-builder basemap use maryland`; omitting the source prompts with
-the available project extract and regional downloads. Advanced custom PBF paths
-can still be set manually in `civic-map-builder.project.yml`. OSM base-map data
-is not committed.
+Download options live in `config/osm_downloads.yml`; project defaults live in
+`config/project.yml`; machine-local base-map state lives in ignored
+`config/local.yml`. Downloaded OSM data and generated PNGs are not committed.
 
-Each association contributes two files:
+## Maintainers
 
-- `associations/<association_id>/boundary.md` for front matter plus the boundary
-  bylaw or description snippet.
-- `associations/<association_id>/boundary.geojson` for WGS84 lon/lat boundary
-  coordinates.
-
-See `associations/sample__blair_highschool/` for a compact example, including a
-GeoJSON polygon with an interior exclusion/hole.
-
-Rendered PNGs are generated under `outputs/` and are not committed. Run commands
-from the repository root so `civic-map-builder.project.yml` resolves as expected.
-For workflow details, see `docs/overview.md`.
+Run commands from the repository root so `config/project.yml` resolves correctly.
+For publishing map assets, see [`docs/maintainer_release.md`](docs/maintainer_release.md).
 
 ## Licensing
 
@@ -84,7 +76,14 @@ unrestricted:
   Commons Zero (CC0 1.0 Universal)** dedication. You are completely free to use, modify,
   and distribute this data without any legal restrictions or attribution requirements.
 
-*Note: While credit is legally not required under CC0, we kindly request a link back to
-this repository if you use our maps. This helps other local organizations discover the
-project and contribute back to keep our regional data accurate!*
+*Note: While credit is legally not required under CC0, we kindly request that you spread
+the word or link back to this repository. This helps other local organizations discover
+the project and contribute back to keep our regional data accurate!*
 
+## Known Limitations
+
+Cross-border base-map extracts work best when `basemap extract` can cut a
+bounding box from one consolidated parent PBF; using two separate regional PBFs
+currently requires manually merging matching-date files with `osmium merge`
+before extraction. A future enhancement may automate that merge-then-extract
+workflow for projects that span configured download regions.

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
-  { name = "Your Name", email = "you@example.com" }
+  { name = "Chris Betti", email = "cbetti@gmail.com" }
 ]
 dependencies = [
   "typer>=0.12.0",

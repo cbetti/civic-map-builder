@@ -1,0 +1,9 @@
+downloads:
+  district-of-columbia:
+    label: District of Columbia
+    source_url: https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf
+    filename: district-of-columbia-latest.osm.pbf
+  maryland:
+    label: Maryland
+    source_url: https://download.geofabrik.de/north-america/us/maryland-latest.osm.pbf
+    filename: maryland-latest.osm.pbf

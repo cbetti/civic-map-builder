@@ -11,7 +11,8 @@ class CivicMapBuilderError(Exception):
     """Base exception for civic-map-builder."""
 
 
-DEFAULT_PROJECT_CONFIG = "civic-map-builder.project.yml"
+DEFAULT_PROJECT_CONFIG = "config/project.yml"
+DEFAULT_LOCAL_CONFIG = "config/local.yml"
 
 
 @dataclass(frozen=True)
@@ -52,21 +53,17 @@ class ProjectConfig:
         if not config_path.is_file():
             raise CivicMapBuilderError(f"Project config not found: {config_path}")
 
-        try:
-            raw = yaml.safe_load(config_path.read_text(encoding="utf8")) or {}
-        except yaml.YAMLError as exc:  # pragma: no cover - yaml error formatting
-            raise CivicMapBuilderError(f"Failed to parse project config: {config_path}") from exc
-
-        if not isinstance(raw, Mapping):
-            raise CivicMapBuilderError(
-                f"Project config must be a mapping/object: {config_path}"
-            )
+        raw = _load_mapping_file(config_path, label="Project config")
+        if path is None:
+            local_path = Path(DEFAULT_LOCAL_CONFIG)
+            if local_path.is_file():
+                raw = _merge_local_base_map(raw, local_path)
 
         return cls._from_mapping(raw, config_path=config_path)
 
     @classmethod
     def _from_mapping(cls, data: Mapping[str, Any], *, config_path: Path) -> "ProjectConfig":
-        root = config_path.parent.resolve()
+        root = _project_root_for_config(config_path)
         project_id = _require_str(data, "project_id", config_path)
         description = data.get("description")
 
@@ -82,7 +79,7 @@ class ProjectConfig:
             description=description,
             associations_dir=_resolve_path(data, "associations_dir", root, config_path),
             outputs=outputs,
-            base_map=_base_map_config(data.get("base_map"), config_path),
+            base_map=_base_map_config(data.get("base_map"), root, config_path),
             project_root=root,
         )
 
@@ -105,6 +102,45 @@ def _require_mapping(
     if not isinstance(value, Mapping):
         raise CivicMapBuilderError(f"'{key}' must be a mapping/object in {config_path}")
     return value
+
+
+def _load_mapping_file(path: Path, *, label: str) -> dict[str, Any]:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf8")) or {}
+    except yaml.YAMLError as exc:  # pragma: no cover - yaml error formatting
+        raise CivicMapBuilderError(f"Failed to parse {label.lower()}: {path}") from exc
+    if not isinstance(raw, Mapping):
+        raise CivicMapBuilderError(f"{label} must be a mapping/object: {path}")
+    return dict(raw)
+
+
+def _merge_local_base_map(data: Mapping[str, Any], local_path: Path) -> dict[str, Any]:
+    merged = dict(data)
+    local = _load_mapping_file(local_path, label="Local config")
+    local_base_map = local.get("base_map")
+    if local_base_map is None:
+        return merged
+    if not isinstance(local_base_map, Mapping):
+        raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {local_path}")
+
+    base_map = merged.get("base_map")
+    if base_map is None:
+        base_map = {}
+    if not isinstance(base_map, Mapping):
+        raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {DEFAULT_PROJECT_CONFIG}")
+    merged_base_map = dict(base_map)
+    for key in ("enabled", "pbf_path"):
+        if key in local_base_map:
+            merged_base_map[key] = local_base_map[key]
+    merged["base_map"] = merged_base_map
+    return merged
+
+
+def _project_root_for_config(config_path: Path) -> Path:
+    parent = config_path.parent.resolve()
+    if config_path.name == "project.yml" and parent.name == "config":
+        return parent.parent
+    return parent
 
 
 def _require_str(data: Mapping[str, Any], key: str, config_path: Path) -> str:
@@ -133,13 +169,13 @@ def _resolve_path(
     return path.resolve()
 
 
-def _base_map_config(value: Any, config_path: Path) -> BaseMapConfig:
+def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig:
     if value is None:
         value = {}
     if not isinstance(value, Mapping):
         raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {config_path}")
 
-    pbf_path = _optional_path(value.get("pbf_path"), config_path.parent.resolve(), config_path)
+    pbf_path = _optional_path(value.get("pbf_path"), root, config_path)
 
     download = value.get("download")
     if download is not None and (not isinstance(download, str) or not download.strip()):

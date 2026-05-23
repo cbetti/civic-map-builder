@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 import typer
+from pathlib import Path
 
 from . import __version__
 from . import render
@@ -18,7 +19,7 @@ from .basemap import (
     project_extract_path,
     update_base_map_config,
 )
-from .util import load_project_config
+from .util import DEFAULT_LOCAL_CONFIG, load_project_config
 from .util import CivicMapBuilderError
 
 app = typer.Typer(help="Validate and render civic association boundary contributions.")
@@ -210,10 +211,12 @@ def basemap_status() -> None:
 
 def _show_basemap_status() -> None:
     config = load_project_config()
+    local_path = Path(DEFAULT_LOCAL_CONFIG)
     typer.echo(f"enabled: {config.base_map.enabled}")
     typer.echo(f"download: {config.base_map.download or ''}")
     typer.echo(f"pbf_path: {config.base_map.pbf_path or ''}")
     typer.echo(f"padding_ratio: {config.base_map.padding_ratio}")
+    typer.echo(f"local_config: {local_path if local_path.is_file() else ''}")
     if config.base_map.views:
         typer.echo("views:")
         for view in config.base_map.views:
@@ -263,7 +266,7 @@ def _use_cached_basemap(download: str) -> None:
         raise CivicMapBuilderError(
             f"Cached PBF not found: {cache_path}. Run 'civic-map-builder basemap download {download}' first."
         )
-    update_base_map_config(enabled=True, download=download, pbf_path=cache_path)
+    update_base_map_config(enabled=True, pbf_path=cache_path)
     typer.echo(f"Enabled base maps using {cache_path}.")
 
 

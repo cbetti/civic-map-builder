@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-from importlib.util import find_spec
 from dataclasses import dataclass, field
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -11,25 +11,17 @@ from shapely.geometry import LineString, Polygon, box
 from shapely.geometry.base import BaseGeometry
 
 from .associations import Association, load_associations
-from .util import BaseMapConfig, CivicMapBuilderError, ProjectConfig, load_project_config
+from .util import (
+    DEFAULT_LOCAL_CONFIG,
+    BaseMapConfig,
+    CivicMapBuilderError,
+    ProjectConfig,
+    load_project_config,
+)
 import yaml
 
 APP_NAME = "civic-map-builder"
-DOWNLOAD_OPTIONS = {
-    "district-of-columbia": {
-        "label": "District of Columbia",
-        "source_url": (
-            "https://download.geofabrik.de/north-america/us/"
-            "district-of-columbia-latest.osm.pbf"
-        ),
-        "filename": "district-of-columbia-latest.osm.pbf",
-    },
-    "maryland": {
-        "label": "Maryland",
-        "source_url": "https://download.geofabrik.de/north-america/us/maryland-latest.osm.pbf",
-        "filename": "maryland-latest.osm.pbf",
-    },
-}
+DEFAULT_OSM_DOWNLOADS_CONFIG = "config/osm_downloads.yml"
 
 ROAD_TAGS = {
     "motorway",
@@ -72,6 +64,13 @@ class ExtractedBaseMap:
     command: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DownloadOption:
+    label: str
+    source_url: str
+    filename: str
+
+
 def default_cache_root() -> Path:
     try:
         from platformdirs import user_cache_path
@@ -84,17 +83,17 @@ def default_cache_root() -> Path:
 
 
 def available_downloads() -> tuple[str, ...]:
-    return tuple(sorted(DOWNLOAD_OPTIONS))
+    return tuple(sorted(_download_options()))
 
 
 def download_label(download: str) -> str:
-    return _download_option(download)["label"]
+    return _download_option(download).label
 
 
 def pbf_cache_path(download: str, cache_root: Path | None = None) -> Path:
     option = _download_option(download)
     root = cache_root or default_cache_root()
-    return root / "osm" / "geofabrik" / option["filename"]
+    return root / "osm" / "geofabrik" / option.filename
 
 
 def project_extract_path(project_id: str, cache_root: Path | None = None) -> Path:
@@ -231,7 +230,7 @@ def prepare_basemap(
     if target_path.exists() and not refresh:
         return PreparedBaseMap(
             download=selected_download,
-            source_url=option["source_url"],
+            source_url=option.source_url,
             path=target_path,
             downloaded=False,
         )
@@ -246,7 +245,7 @@ def prepare_basemap(
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = target_path.with_suffix(target_path.suffix + ".part")
-    with requests.get(option["source_url"], stream=True, timeout=30) as response:
+    with requests.get(option.source_url, stream=True, timeout=30) as response:
         response.raise_for_status()
         total_bytes = _content_length(response)
         received_bytes = 0
@@ -260,7 +259,7 @@ def prepare_basemap(
     temp_path.replace(target_path)
     return PreparedBaseMap(
         download=selected_download,
-        source_url=option["source_url"],
+        source_url=option.source_url,
         path=target_path,
         downloaded=True,
     )
@@ -475,8 +474,9 @@ def update_base_map_config(
     download: str | None = None,
     pbf_path: Path | None = None,
 ) -> None:
-    target_path = config_path or Path("civic-map-builder.project.yml")
-    data = _load_config_mapping(target_path)
+    write_local_config = config_path is None
+    target_path = config_path or Path(DEFAULT_LOCAL_CONFIG)
+    data = _load_config_mapping(target_path, require_exists=not write_local_config)
     base_map = data.get("base_map")
     if base_map is None:
         base_map = {}
@@ -488,34 +488,90 @@ def update_base_map_config(
         base_map["enabled"] = enabled
     if download is not None:
         _download_option(download)
-        base_map["download"] = download
+        if not write_local_config:
+            base_map["download"] = download
     if pbf_path is not None:
         base_map["pbf_path"] = str(pbf_path.expanduser().resolve())
 
-    base_map.setdefault("padding_ratio", 0.15)
-    base_map.setdefault("views", {})
+    if not write_local_config:
+        base_map.setdefault("padding_ratio", 0.15)
+        base_map.setdefault("views", {})
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf8")
 
 
-def _download_option(download: str) -> dict[str, str]:
+def _download_options(config_path: Path | None = None) -> dict[str, DownloadOption]:
+    path = config_path or Path(DEFAULT_OSM_DOWNLOADS_CONFIG)
+    data = _load_config_mapping(path, label="OSM downloads config")
+    downloads = data.get("downloads")
+    if not isinstance(downloads, Mapping):
+        raise CivicMapBuilderError(f"'downloads' must be a mapping/object in {path}")
+
+    options = {}
+    for key, value in downloads.items():
+        if not isinstance(key, str) or not key.strip():
+            raise CivicMapBuilderError(f"Download keys must be non-empty strings in {path}")
+        if not isinstance(value, Mapping):
+            raise CivicMapBuilderError(f"'downloads.{key}' must be a mapping/object in {path}")
+        options[key] = DownloadOption(
+            label=_required_download_str(value, "label", key, path),
+            source_url=_required_download_str(value, "source_url", key, path),
+            filename=_download_filename(value, key, path),
+        )
+    return options
+
+
+def _download_option(download: str) -> DownloadOption:
+    options = _download_options()
     try:
-        return DOWNLOAD_OPTIONS[download]
+        return options[download]
     except KeyError as exc:
         raise CivicMapBuilderError(
             f"Unknown base_map.download option '{download}'. "
-            "Available options: " + ", ".join(available_downloads())
+            "Available options: " + ", ".join(sorted(options))
         ) from exc
 
 
-def _load_config_mapping(config_path: Path) -> dict[str, Any]:
+def _required_download_str(
+    data: Mapping[str, Any],
+    key: str,
+    download: str,
+    config_path: Path,
+) -> str:
+    value = data.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise CivicMapBuilderError(
+            f"'downloads.{download}.{key}' must be a non-empty string in {config_path}"
+        )
+    return value
+
+
+def _download_filename(data: Mapping[str, Any], download: str, config_path: Path) -> str:
+    filename = _required_download_str(data, "filename", download, config_path)
+    path = Path(filename)
+    if path.is_absolute() or path.name != filename:
+        raise CivicMapBuilderError(
+            f"'downloads.{download}.filename' must be a filename, not a path, in {config_path}"
+        )
+    return filename
+
+
+def _load_config_mapping(
+    config_path: Path,
+    *,
+    require_exists: bool = True,
+    label: str = "Project config",
+) -> dict[str, Any]:
     if not config_path.is_file():
-        raise CivicMapBuilderError(f"Project config not found: {config_path}")
+        if not require_exists:
+            return {}
+        raise CivicMapBuilderError(f"{label} not found: {config_path}")
     try:
         data = yaml.safe_load(config_path.read_text(encoding="utf8")) or {}
     except yaml.YAMLError as exc:
-        raise CivicMapBuilderError(f"Failed to parse project config: {config_path}") from exc
+        raise CivicMapBuilderError(f"Failed to parse {label.lower()}: {config_path}") from exc
     if not isinstance(data, Mapping):
-        raise CivicMapBuilderError(f"Project config must be a mapping/object: {config_path}")
+        raise CivicMapBuilderError(f"{label} must be a mapping/object: {config_path}")
     return dict(data)
 
 

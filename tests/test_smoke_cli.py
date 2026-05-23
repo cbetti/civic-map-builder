@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typer.testing import CliRunner
 
 from civic_map_builder.cli import app
+from civic_map_builder.util import DEFAULT_LOCAL_CONFIG, ProjectConfig
 
 runner = CliRunner()
 
@@ -68,6 +69,7 @@ def test_basemap_status_and_off_smoke() -> None:
         assert help_result.exit_code == 0
         assert status_result.exit_code == 0
         assert "enabled:" in status_result.stdout
+        assert "local_config:" in status_result.stdout
         assert off_result.exit_code == 0
 
 
@@ -90,7 +92,10 @@ def test_basemap_download_cached_yes_updates_config(monkeypatch, tmp_path: Path)
         assert result.exit_code == 0
         assert "Using existing cached file" in result.stdout
         assert "Enabled base maps" in result.stdout
-        assert "pbf_path: " + str(cache_path) in Path("civic-map-builder.project.yml").read_text(
+        assert "pbf_path: " + str(cache_path) in Path(DEFAULT_LOCAL_CONFIG).read_text(
+            encoding="utf8"
+        )
+        assert "pbf_path: " not in Path("config/project.yml").read_text(
             encoding="utf8"
         )
 
@@ -106,9 +111,7 @@ def test_basemap_download_cached_no_leaves_config(monkeypatch, tmp_path: Path) -
 
         assert result.exit_code == 0
         assert "Base-map config unchanged." in result.stdout
-        assert "pbf_path: " not in Path("civic-map-builder.project.yml").read_text(
-            encoding="utf8"
-        )
+        assert not Path(DEFAULT_LOCAL_CONFIG).exists()
 
 
 def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) -> None:
@@ -121,9 +124,13 @@ def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) ->
         result = runner.invoke(app, ["basemap", "use", "district-of-columbia"])
 
         assert result.exit_code == 0
-        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
-        assert "download: district-of-columbia" in config_text
+        config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
+        assert "download:" not in config_text
+        assert "pbf_path: " + str(cache_path) in config_text
         assert "enabled: true" in config_text
+        assert "download: district-of-columbia" not in Path(
+            "config/project.yml"
+        ).read_text(encoding="utf8")
 
 
 def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: Path) -> None:
@@ -144,10 +151,10 @@ def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: 
         result = runner.invoke(app, ["basemap", "use", "extract"])
 
         assert result.exit_code == 0
-        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
-        assert "download: maryland" in config_text
+        config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "pbf_path: " + str(extract_path) in config_text
         assert "enabled: true" in config_text
+        assert ProjectConfig.load().base_map.download == "maryland"
 
 
 def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) -> None:
@@ -165,7 +172,7 @@ def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) 
         assert result.exit_code == 0
         assert "- extract: Project extract" in result.stdout
         assert "Select base map (extract, district-of-columbia, maryland)" in result.stdout
-        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "pbf_path: " + str(extract_path) in config_text
 
 
@@ -224,9 +231,12 @@ def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None
         assert "BBox:" in result.stdout
         assert "Input: " + str(input_path) in result.stdout
         assert "Output: " + str(extract_path) in result.stdout
-        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "enabled: true" in config_text
         assert "pbf_path: " + str(extract_path) in config_text
+        assert "pbf_path: " + str(extract_path) not in Path(
+            "config/project.yml"
+        ).read_text(encoding="utf8")
 
 
 def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> None:
@@ -254,14 +264,16 @@ def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> Non
 
         assert result.exit_code == 0
         assert "Base-map config unchanged." in result.stdout
-        config_text = Path("civic-map-builder.project.yml").read_text(encoding="utf8")
+        config_text = Path("config/project.yml").read_text(encoding="utf8")
         assert "pbf_path: " + str(input_path) in config_text
         assert "pbf_path: " + str(extract_path) not in config_text
+        assert not Path(DEFAULT_LOCAL_CONFIG).exists()
 
 
 def _write_project_config(*, extra_lines: list[str] | None = None) -> None:
     extra_lines = extra_lines or []
-    Path("civic-map-builder.project.yml").write_text(
+    Path("config").mkdir(parents=True, exist_ok=True)
+    Path("config/project.yml").write_text(
         "\n".join(
             [
                 'project_id: "test_project"',
@@ -271,6 +283,23 @@ def _write_project_config(*, extra_lines: list[str] | None = None) -> None:
                 '  maps: "outputs/maps"',
                 '  release: "outputs/release"',
                 *extra_lines,
+                "",
+            ]
+        ),
+        encoding="utf8",
+    )
+    Path("config/osm_downloads.yml").write_text(
+        "\n".join(
+            [
+                "downloads:",
+                "  district-of-columbia:",
+                "    label: District of Columbia",
+                "    source_url: https://example.test/district-of-columbia.osm.pbf",
+                "    filename: district-of-columbia-latest.osm.pbf",
+                "  maryland:",
+                "    label: Maryland",
+                "    source_url: https://example.test/maryland.osm.pbf",
+                "    filename: maryland-latest.osm.pbf",
                 "",
             ]
         ),

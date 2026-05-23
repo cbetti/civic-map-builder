@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from civic_map_builder.basemap import (
+    _download_options,
     available_downloads,
     extract_basemap,
     extraction_bbox,
@@ -14,7 +15,7 @@ from civic_map_builder.basemap import (
     project_extract_path,
     update_base_map_config,
 )
-from civic_map_builder.util import CivicMapBuilderError, ProjectConfig
+from civic_map_builder.util import DEFAULT_LOCAL_CONFIG, CivicMapBuilderError, ProjectConfig
 import pytest
 from shapely.geometry import box
 
@@ -44,6 +45,51 @@ def test_base_map_config_parses_named_views(tmp_path: Path) -> None:
     assert config.base_map.views[0].bbox == (-77.2, 38.8, -76.8, 39.2)
 
 
+def test_project_config_load_applies_only_local_base_map_runtime_keys(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  enabled: false",
+            "  download: maryland",
+            "  padding_ratio: 0.15",
+            "  views: {}",
+        ],
+    )
+    local_pbf = tmp_path / "cache/extract.osm.pbf"
+    (tmp_path / DEFAULT_LOCAL_CONFIG).write_text(
+        "\n".join(
+            [
+                "base_map:",
+                "  enabled: true",
+                "  download: district-of-columbia",
+                f"  pbf_path: {local_pbf}",
+                "  padding_ratio: 0.8",
+                "  views:",
+                "    local:",
+                "      bbox: [-78, 38, -77, 39]",
+                "",
+            ]
+        ),
+        encoding="utf8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    merged = ProjectConfig.load()
+    explicit = ProjectConfig.load(config_path)
+
+    assert merged.base_map.enabled is True
+    assert merged.base_map.download == "maryland"
+    assert merged.base_map.pbf_path == local_pbf
+    assert merged.base_map.padding_ratio == 0.15
+    assert merged.base_map.views == ()
+    assert explicit.base_map.enabled is False
+    assert explicit.base_map.pbf_path is None
+
+
 def test_pbf_cache_path_uses_download_option_and_cache_root(tmp_path: Path) -> None:
     path = pbf_cache_path("maryland", cache_root=tmp_path / "cache")
 
@@ -55,6 +101,69 @@ def test_district_of_columbia_is_available_download(tmp_path: Path) -> None:
 
     assert "district-of-columbia" in available_downloads()
     assert path == tmp_path / "cache/osm/geofabrik/district-of-columbia-latest.osm.pbf"
+
+
+def test_osm_download_config_loads_options_from_yaml(tmp_path: Path) -> None:
+    config_path = _write_osm_downloads_config(
+        tmp_path,
+        [
+            "downloads:",
+            "  custom-region:",
+            "    label: Custom Region",
+            "    source_url: https://example.test/custom.osm.pbf",
+            "    filename: custom.osm.pbf",
+        ],
+    )
+
+    options = _download_options(config_path)
+
+    assert options["custom-region"].label == "Custom Region"
+    assert options["custom-region"].source_url == "https://example.test/custom.osm.pbf"
+    assert options["custom-region"].filename == "custom.osm.pbf"
+
+
+def test_osm_download_config_requires_download_mapping(tmp_path: Path) -> None:
+    config_path = _write_osm_downloads_config(tmp_path, ["downloads: []"])
+
+    with pytest.raises(CivicMapBuilderError) as exc_info:
+        _download_options(config_path)
+
+    assert "'downloads' must be a mapping" in str(exc_info.value)
+
+
+def test_osm_download_config_requires_fields(tmp_path: Path) -> None:
+    config_path = _write_osm_downloads_config(
+        tmp_path,
+        [
+            "downloads:",
+            "  custom-region:",
+            "    label: Custom Region",
+            "    filename: custom.osm.pbf",
+        ],
+    )
+
+    with pytest.raises(CivicMapBuilderError) as exc_info:
+        _download_options(config_path)
+
+    assert "downloads.custom-region.source_url" in str(exc_info.value)
+
+
+def test_osm_download_config_rejects_path_filename(tmp_path: Path) -> None:
+    config_path = _write_osm_downloads_config(
+        tmp_path,
+        [
+            "downloads:",
+            "  custom-region:",
+            "    label: Custom Region",
+            "    source_url: https://example.test/custom.osm.pbf",
+            "    filename: nested/custom.osm.pbf",
+        ],
+    )
+
+    with pytest.raises(CivicMapBuilderError) as exc_info:
+        _download_options(config_path)
+
+    assert "must be a filename" in str(exc_info.value)
 
 
 def test_project_extract_path_uses_project_id_and_cache_root(tmp_path: Path) -> None:
@@ -240,9 +349,32 @@ def test_update_base_map_config_sets_download_and_pbf_path(tmp_path: Path) -> No
     assert config.base_map.pbf_path == pbf_path
 
 
+def test_update_base_map_config_defaults_to_local_override(monkeypatch, tmp_path: Path) -> None:
+    _write_project_config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    pbf_path = tmp_path / "cache/osm/geofabrik/maryland-latest.osm.pbf"
+
+    update_base_map_config(
+        enabled=True,
+        download="maryland",
+        pbf_path=pbf_path,
+    )
+
+    project_config = ProjectConfig.load(tmp_path / "config/project.yml")
+    merged_config = ProjectConfig.load()
+    local_text = (tmp_path / DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
+    assert project_config.base_map.enabled is False
+    assert project_config.base_map.pbf_path is None
+    assert merged_config.base_map.enabled is True
+    assert merged_config.base_map.pbf_path == pbf_path
+    assert "pbf_path: " + str(pbf_path) in local_text
+    assert "download:" not in local_text
+
+
 def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -> Path:
     extra_lines = extra_lines or []
-    config_path = root / "civic-map-builder.project.yml"
+    config_path = root / "config/project.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
             [
@@ -258,6 +390,27 @@ def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -
         ),
         encoding="utf8",
     )
+    _write_osm_downloads_config(
+        root,
+        [
+            "downloads:",
+            "  district-of-columbia:",
+            "    label: District of Columbia",
+            "    source_url: https://example.test/district-of-columbia.osm.pbf",
+            "    filename: district-of-columbia-latest.osm.pbf",
+            "  maryland:",
+            "    label: Maryland",
+            "    source_url: https://example.test/maryland.osm.pbf",
+            "    filename: maryland-latest.osm.pbf",
+        ],
+    )
+    return config_path
+
+
+def _write_osm_downloads_config(root: Path, lines: list[str]) -> Path:
+    config_path = root / "config/osm_downloads.yml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("\n".join([*lines, ""]), encoding="utf8")
     return config_path
 
 
