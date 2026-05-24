@@ -12,8 +12,8 @@ their own association data.
 ```bash
 git clone <repo-url>
 cd civic-map-builder
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv  # Windows PowerShell: python -m venv .venv
+source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 civic-map-builder check
 civic-map-builder render

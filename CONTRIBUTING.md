@@ -7,7 +7,7 @@ small CLI for checking and rendering that data.
 
 1. Fork and clone the repo.
 2. Create a branch.
-3. Run `pip install -e ".[dev]"`.
+3. Create/activate a venv (`python3 -m venv .venv`, `source .venv/bin/activate`; Windows PowerShell: `python -m venv .venv`, `.\.venv\Scripts\Activate.ps1`), then run `pip install -e ".[dev]"`.
 4. Create a folder with `civic-map-builder new my_association`, or edit an
    existing folder under `associations/`.
 5. Fill in `boundary.md` with the association name and a link to the source text.

@@ -9,7 +9,7 @@
 - Example association data: `associations/sample__blair_highschool/` demonstrates boundary files, including a GeoJSON polygon with an interior exclusion/hole.
 
 ## Build, Test, and Development Commands
-- Create/activate venv (example): `python -m venv venv && source venv/bin/activate` (`.\venv\Scripts\activate` on Windows).
+- Create/activate venv: `python3 -m venv .venv`, then `source .venv/bin/activate`; Windows PowerShell: `python -m venv .venv`, then `.\.venv\Scripts\Activate.ps1`.
 - Install dev deps: `pip install -e .[dev]`.
 - Run the CLI: `civic-map-builder --help`, `civic-map-builder check`, and `civic-map-builder render` to verify command wiring.
 - Optional OSM base maps: install `pip install -e ".[dev,basemap]"`, then use `civic-map-builder basemap --help`.
