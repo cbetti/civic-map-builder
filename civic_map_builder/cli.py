@@ -94,10 +94,16 @@ def preview(
 
 
 @app.command("render")
-def render_all() -> None:
+def render_all(
+    include_samples: bool = typer.Option(
+        True,
+        "--include-samples/--exclude-samples",
+        help="Include association folders whose ids start with sample__.",
+    ),
+) -> None:
     """Render the full regional PNG map."""
     try:
-        output_paths = render.render_regional_map()
+        output_paths = render.render_regional_map(include_samples=include_samples)
     except CivicMapBuilderError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -307,10 +313,15 @@ def release_assets(
         "--release-name",
         help="Date-based release name, for example 2026-05.1.",
     ),
+    include_samples: bool = typer.Option(
+        False,
+        "--include-samples/--exclude-samples",
+        help="Include association folders whose ids start with sample__.",
+    ),
 ) -> None:
     """Stage PNG map assets for manual upload to a GitHub Release."""
     try:
-        output_dir = render.stage_release_assets(release_name)
+        output_dir = render.stage_release_assets(release_name, include_samples=include_samples)
     except CivicMapBuilderError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

@@ -48,6 +48,58 @@ def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
     assert (tmp_path / "outputs/maps/closeup.png").is_file()
 
 
+def test_render_regional_map_includes_sample_associations_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    _write_association(tmp_path, "sample__demo", "Sample Demo", -77.02, 39.0)
+    rendered_ids: list[list[str]] = []
+
+    def fake_render_png(**kwargs) -> None:
+        rendered_ids.append(
+            [association.association_id for association in kwargs["associations"]]
+        )
+        kwargs["output_path"].write_bytes(b"png")
+
+    monkeypatch.setattr(render, "_render_png", fake_render_png)
+
+    render.render_regional_map(config_path=config_path)
+    render.render_regional_map(config_path=config_path, include_samples=False)
+
+    assert rendered_ids == [
+        ["alpha", "sample__demo"],
+        ["alpha"],
+    ]
+
+
+def test_release_assets_excludes_sample_associations_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    _write_association(tmp_path, "sample__demo", "Sample Demo", -77.02, 39.0)
+    rendered_ids: list[list[str]] = []
+
+    def fake_render_png(**kwargs) -> None:
+        rendered_ids.append(
+            [association.association_id for association in kwargs["associations"]]
+        )
+        kwargs["output_path"].write_bytes(b"png")
+
+    monkeypatch.setattr(render, "_render_png", fake_render_png)
+
+    render.stage_release_assets("2026-05.1", config_path=config_path)
+    render.stage_release_assets("2026-05.2", config_path=config_path, include_samples=True)
+
+    assert rendered_ids == [
+        ["alpha"],
+        ["alpha", "sample__demo"],
+    ]
+
+
 def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_project_config(tmp_path)
     _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)

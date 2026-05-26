@@ -1,11 +1,11 @@
 # civic-map-builder
 
-A repo-local CLI and Montgomery County-area boundary dataset for turning civic
-association source text and GeoJSON coordinates into reviewable PNG maps.
+A small CLI and boundary dataset for checking civic association GeoJSON files and
+rendering them as PNG maps.
 
-This repository is both a Python tool and a data project. Contributors can add or
-improve boundaries under `associations/`; other groups can reuse the tool with
-their own association data.
+This repo has two parts: the map-building tool and the association boundary data.
+Contributors can add or improve boundaries under `associations/`; other groups
+can reuse the tool with their own GeoJSON boundary files.
 
 ## Quick Start
 

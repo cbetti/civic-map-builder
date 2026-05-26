@@ -16,6 +16,10 @@ Use this when a fresh public map is worth publishing.
    civic-map-builder release-assets --release-name YYYY-MM.N
    ```
 
+   `release-assets` excludes `sample__*` association folders by default. Use
+   `--include-samples` only when a sample boundary should be part of the staged
+   release assets.
+
 4. Create a GitHub Release with the same date-based name, such as `2026-05.1`.
 5. Upload the PNG files from `outputs/release/YYYY-MM.N/`.
 

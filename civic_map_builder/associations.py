@@ -15,6 +15,7 @@ from .util import CivicMapBuilderError, ProjectConfig, load_project_config
 ASSOCIATION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 BOUNDARY_MD = "boundary.md"
 BOUNDARY_GEOJSON = "boundary.geojson"
+SAMPLE_ASSOCIATION_PREFIX = "sample__"
 
 
 @dataclass(frozen=True)
@@ -75,11 +76,17 @@ def load_association(
     return _load_association_dir(config.associations_dir / association_id)
 
 
-def load_associations(*, config_path: Path | None = None) -> list[Association]:
+def load_associations(
+    *,
+    config_path: Path | None = None,
+    include_samples: bool = True,
+) -> list[Association]:
     config = load_project_config(path=config_path)
     associations: list[Association] = []
     errors: list[str] = []
     for directory in list_association_dirs(config):
+        if not include_samples and directory.name.startswith(SAMPLE_ASSOCIATION_PREFIX):
+            continue
         try:
             associations.append(_load_association_dir(directory))
         except CivicMapBuilderError as exc:

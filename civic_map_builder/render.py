@@ -97,9 +97,13 @@ def render_preview(association_id: str, *, config_path: Path | None = None) -> P
     return output_path
 
 
-def render_regional_map(*, config_path: Path | None = None) -> list[Path]:
+def render_regional_map(
+    *,
+    config_path: Path | None = None,
+    include_samples: bool = True,
+) -> list[Path]:
     config = load_project_config(path=config_path)
-    associations = load_associations(config_path=config_path)
+    associations = load_associations(config_path=config_path, include_samples=include_samples)
     if not associations:
         raise CivicMapBuilderError("No associations found to render.")
 
@@ -130,10 +134,11 @@ def stage_release_assets(
     release_name: str | None = None,
     *,
     config_path: Path | None = None,
+    include_samples: bool = False,
 ) -> Path:
     config = load_project_config(path=config_path)
     release_name = release_name or _default_release_name()
-    map_paths = render_regional_map(config_path=config_path)
+    map_paths = render_regional_map(config_path=config_path, include_samples=include_samples)
 
     release_dir = config.outputs.release / release_name
     release_dir.mkdir(parents=True, exist_ok=True)
