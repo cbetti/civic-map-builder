@@ -1,5 +1,5 @@
 ---
-name: North Woodside Citizens’ Association
+name: North Woodside Citizens Association
 bylaws_source_url: https://northwoodside.org/wp-content/uploads/2026/05/nwcabylaws.2026.05.20.pdf
 last_updated: 2026-05-26
 last_updated_by: Chris Betti
