@@ -6,6 +6,5 @@ outputs:
   maps: outputs/maps
   release: outputs/release
 base_map:
-  download: maryland
   padding_ratio: 0.15
   views: {}

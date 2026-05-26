@@ -12,7 +12,7 @@ from shapely.geometry import LineString, MultiPolygon, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from .associations import Association, load_association, load_associations
-from .basemap import BaseMapFeatures, configured_pbf_path, load_basemap_features
+from .basemap import BaseMapFeatures, configured_render_basemap, load_basemap_features
 from .util import BaseMapConfig, CivicMapBuilderError, load_project_config
 
 BASEMAP_ATTRIBUTION = (
@@ -511,7 +511,7 @@ def _maybe_load_basemap(
 ) -> BaseMapFeatures | None:
     if not config.enabled:
         return None
-    return load_basemap_features(pbf_path=configured_pbf_path(config), bounds=bounds)
+    return load_basemap_features(pbf_path=configured_render_basemap(config), bounds=bounds)
 
 
 def _default_release_name() -> str:

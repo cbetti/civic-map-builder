@@ -122,7 +122,7 @@ def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch)
     )
 
 
-def test_enabled_basemap_requires_configured_pbf_path(tmp_path: Path) -> None:
+def test_enabled_basemap_requires_configured_render_basemap(tmp_path: Path) -> None:
     config_path = _write_project_config(
         tmp_path,
         extra_lines=[
@@ -135,9 +135,9 @@ def test_enabled_basemap_requires_configured_pbf_path(tmp_path: Path) -> None:
     try:
         render.render_preview("alpha", config_path=config_path)
     except CivicMapBuilderError as exc:
-        assert "base_map.pbf_path is not configured" in str(exc)
+        assert "base_map.render_basemap is not configured" in str(exc)
     else:
-        raise AssertionError("Expected missing pbf_path to fail")
+        raise AssertionError("Expected missing render_basemap to fail")
 
 
 def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -> Path:

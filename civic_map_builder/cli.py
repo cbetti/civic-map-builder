@@ -8,12 +8,12 @@ from . import __version__
 from . import render
 from .associations import check_associations, create_association, load_associations
 from .basemap import (
-    available_downloads,
-    download_label,
+    available_osm_sources,
     extract_basemap,
     extraction_bbox,
     extraction_source_path,
     format_bbox,
+    osm_source_label,
     pbf_cache_path,
     prepare_basemap,
     project_extract_path,
@@ -113,23 +113,27 @@ def render_all(
 
 @basemap_app.command("download")
 def basemap_download(
-    download: str | None = typer.Argument(
+    osm_source: str | None = typer.Argument(
         None,
-        help="Download option, e.g. maryland. Prompts if omitted.",
+        help="OSM source, e.g. maryland. Prompts if omitted.",
     ),
     refresh: bool = typer.Option(False, "--refresh", help="Download a fresh copy."),
 ) -> None:
     """Download an OSM PBF into the user cache."""
     try:
-        download = download or _prompt_download()
-        cache_path = pbf_cache_path(download)
-        typer.echo(f"Download: {download} ({download_label(download)})")
+        osm_source = osm_source or _prompt_osm_source()
+        cache_path = pbf_cache_path(osm_source)
+        typer.echo(f"OSM source: {osm_source} ({osm_source_label(osm_source)})")
         typer.echo(f"Cache: {cache_path}")
         if cache_path.exists() and not refresh:
             typer.echo("Using existing cached file. Pass --refresh to download again.")
         else:
             typer.echo("Starting download. This may take a minute for large OSM extracts.")
-        prepared = prepare_basemap(download=download, refresh=refresh, progress=_download_progress)
+        prepared = prepare_basemap(
+            osm_source=osm_source,
+            refresh=refresh,
+            progress=_download_progress,
+        )
     except CivicMapBuilderError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -138,7 +142,7 @@ def basemap_download(
     size_mb = prepared.path.stat().st_size / (1024 * 1024)
     typer.echo(f"Size: {size_mb:.1f} MB")
     if typer.confirm("Use this base map for rendering?", default=True):
-        _use_cached_basemap(prepared.download)
+        _use_cached_basemap(prepared.osm_source)
     else:
         typer.echo("Base-map config unchanged.")
 
@@ -153,13 +157,13 @@ def _download_progress(received_bytes: int, total_bytes: int | None) -> None:
     typer.echo(f"\rDownloaded {received_mb:.1f}/{total_mb:.1f} MB ({percent:.0f}%)", nl=False)
 
 
-def _prompt_download() -> str:
-    downloads = available_downloads()
-    for download in downloads:
-        typer.echo(f"- {download}: {download_label(download)}")
+def _prompt_osm_source() -> str:
+    osm_sources = available_osm_sources()
+    for osm_source in osm_sources:
+        typer.echo(f"- {osm_source}: {osm_source_label(osm_source)}")
     return typer.prompt(
-        "Select OSM download",
-        type=click.Choice(downloads, case_sensitive=False),
+        "Select OSM source",
+        type=click.Choice(osm_sources, case_sensitive=False),
         show_choices=True,
     )
 
@@ -171,9 +175,9 @@ def _prompt_basemap_source() -> str:
     if extract_path.is_file():
         typer.echo(f"- extract: Project extract ({extract_path})")
         choices.append("extract")
-    for download in available_downloads():
-        typer.echo(f"- {download}: {download_label(download)}")
-        choices.append(download)
+    for osm_source in available_osm_sources():
+        typer.echo(f"- {osm_source}: {osm_source_label(osm_source)}")
+        choices.append(osm_source)
     return typer.prompt(
         "Select base map",
         type=click.Choice(choices, case_sensitive=False),
@@ -199,7 +203,7 @@ def basemap_extract() -> None:
 
     typer.echo(f"Wrote {extracted.output_path}")
     if typer.confirm("Use this extracted base map for rendering?", default=True):
-        update_base_map_config(enabled=True, pbf_path=extracted.output_path)
+        update_base_map_config(enabled=True, render_basemap=extracted.output_path)
         typer.echo(f"Enabled base maps using {extracted.output_path}.")
     else:
         typer.echo("Base-map config unchanged.")
@@ -219,8 +223,8 @@ def _show_basemap_status() -> None:
     config = load_project_config()
     local_path = Path(DEFAULT_LOCAL_CONFIG)
     typer.echo(f"enabled: {config.base_map.enabled}")
-    typer.echo(f"download: {config.base_map.download or ''}")
-    typer.echo(f"pbf_path: {config.base_map.pbf_path or ''}")
+    typer.echo(f"osm_source: {config.base_map.osm_source or ''}")
+    typer.echo(f"render_basemap: {config.base_map.render_basemap or ''}")
     typer.echo(f"padding_ratio: {config.base_map.padding_ratio}")
     typer.echo(f"local_config: {local_path if local_path.is_file() else ''}")
     if config.base_map.views:
@@ -262,28 +266,34 @@ def _use_project_extract() -> None:
             f"Project extract not found: {extract_path}. "
             "Run 'civic-map-builder basemap extract' first."
         )
-    update_base_map_config(enabled=True, pbf_path=extract_path)
+    update_base_map_config(enabled=True, render_basemap=extract_path)
     typer.echo(f"Enabled base maps using {extract_path}.")
 
 
-def _use_cached_basemap(download: str) -> None:
-    cache_path = pbf_cache_path(download)
+def _use_cached_basemap(osm_source: str) -> None:
+    cache_path = pbf_cache_path(osm_source)
     if not cache_path.is_file():
         raise CivicMapBuilderError(
-            f"Cached PBF not found: {cache_path}. Run 'civic-map-builder basemap download {download}' first."
+            f"Cached PBF not found: {cache_path}. "
+            f"Run 'civic-map-builder basemap download {osm_source}' first."
         )
-    update_base_map_config(enabled=True, pbf_path=cache_path)
+    update_base_map_config(
+        enabled=True,
+        osm_source=osm_source,
+        render_basemap=cache_path,
+    )
     typer.echo(f"Enabled base maps using {cache_path}.")
 
 
 @basemap_app.command("on")
 def basemap_on() -> None:
-    """Enable base-map rendering with the configured PBF path."""
+    """Enable base-map rendering with the configured render_basemap."""
     try:
         config = load_project_config()
-        if config.base_map.pbf_path is None:
+        if config.base_map.render_basemap is None:
             raise CivicMapBuilderError(
-                "base_map.pbf_path is not configured. Use 'civic-map-builder basemap use' first."
+                "base_map.render_basemap is not configured. "
+                "Use 'civic-map-builder basemap use' first."
             )
         update_base_map_config(enabled=True)
     except CivicMapBuilderError as exc:

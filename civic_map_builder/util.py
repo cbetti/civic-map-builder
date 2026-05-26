@@ -31,8 +31,8 @@ class BaseMapView:
 @dataclass(frozen=True)
 class BaseMapConfig:
     enabled: bool
-    pbf_path: Path | None
-    download: str | None
+    render_basemap: Path | None
+    osm_source: str | None
     padding_ratio: float
     views: tuple[BaseMapView, ...]
 
@@ -127,6 +127,7 @@ def _merge_local_base_map(data: Mapping[str, Any], local_path: Path) -> dict[str
         return merged
     if not isinstance(local_base_map, Mapping):
         raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {local_path}")
+    _reject_renamed_base_map_keys(local_base_map, local_path)
 
     base_map = merged.get("base_map")
     if base_map is None:
@@ -134,7 +135,7 @@ def _merge_local_base_map(data: Mapping[str, Any], local_path: Path) -> dict[str
     if not isinstance(base_map, Mapping):
         raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {DEFAULT_PROJECT_CONFIG}")
     merged_base_map = dict(base_map)
-    for key in ("enabled", "pbf_path"):
+    for key in ("enabled", "osm_source", "render_basemap"):
         if key in local_base_map:
             merged_base_map[key] = local_base_map[key]
     merged["base_map"] = merged_base_map
@@ -179,13 +180,14 @@ def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig
         value = {}
     if not isinstance(value, Mapping):
         raise CivicMapBuilderError(f"'base_map' must be a mapping/object in {config_path}")
+    _reject_renamed_base_map_keys(value, config_path)
 
-    pbf_path = _optional_path(value.get("pbf_path"), root, config_path)
+    render_basemap = _optional_path(value.get("render_basemap"), root, config_path)
 
-    download = value.get("download")
-    if download is not None and (not isinstance(download, str) or not download.strip()):
+    osm_source = value.get("osm_source")
+    if osm_source is not None and (not isinstance(osm_source, str) or not osm_source.strip()):
         raise CivicMapBuilderError(
-            f"'base_map.download' must be a non-empty string in {config_path}"
+            f"'base_map.osm_source' must be a non-empty string in {config_path}"
         )
 
     padding_ratio = value.get("padding_ratio", 0.15)
@@ -206,11 +208,23 @@ def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig
 
     return BaseMapConfig(
         enabled=bool(value.get("enabled", False)),
-        pbf_path=pbf_path,
-        download=download,
+        render_basemap=render_basemap,
+        osm_source=osm_source,
         padding_ratio=float(padding_ratio),
         views=tuple(views),
     )
+
+
+def _reject_renamed_base_map_keys(value: Mapping[str, Any], config_path: Path) -> None:
+    renamed_keys = {
+        "download": "osm_source",
+        "pbf_path": "render_basemap",
+    }
+    for old_key, new_key in renamed_keys.items():
+        if old_key in value:
+            raise CivicMapBuilderError(
+                f"'base_map.{old_key}' has been renamed to 'base_map.{new_key}' in {config_path}"
+            )
 
 
 def _bbox_from_config(value: Any, config_path: Path) -> tuple[float, float, float, float]:
@@ -231,7 +245,9 @@ def _optional_path(value: Any, root: Path, config_path: Path) -> Path | None:
     if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise CivicMapBuilderError(f"'base_map.pbf_path' must be a non-empty string path in {config_path}")
+        raise CivicMapBuilderError(
+            f"'base_map.render_basemap' must be a non-empty string path in {config_path}"
+        )
     path = Path(value)
     if not path.is_absolute():
         path = root / path

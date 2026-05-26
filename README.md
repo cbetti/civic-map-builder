@@ -58,8 +58,8 @@ Rendering from a full OSM download is very slow. `basemap extract` cuts that
 download down to this project's map area, which makes repeated renders much
 faster.
 
-Download options live in `config/osm_downloads.yml`; project defaults live in
-`config/project.yml`; machine-local base-map state lives in ignored
+OSM sources live in `config/osm_sources.yml`; project defaults live in
+`config/project.yml`; machine-local `render_basemap` state lives in ignored
 `config/local.yml`. Downloaded OSM data and generated PNGs are not committed.
 
 ## Maintainers
@@ -90,4 +90,4 @@ Cross-border base-map extracts work best when `basemap extract` can cut a
 bounding box from one consolidated parent PBF; using two separate regional PBFs
 currently requires manually merging matching-date files with `osmium merge`
 before extraction. A future enhancement may automate that merge-then-extract
-workflow for projects that span configured download regions.
+workflow for projects that span configured OSM source regions.

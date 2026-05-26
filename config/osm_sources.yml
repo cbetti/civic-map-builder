@@ -1,4 +1,4 @@
-downloads:
+osm_sources:
   district-of-columbia:
     label: District of Columbia
     source_url: https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf

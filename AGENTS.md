@@ -5,7 +5,7 @@
 - Shared helpers: `civic_map_builder/util.py`; package metadata lives in `civic_map_builder/__init__.py`.
 - Tests: `tests/` with smoke coverage for the CLI; add new module-level tests nearby.
 - Docs: `README.md` for orientation, `CONTRIBUTING.md` for boundary contribution rules, and `docs/` for focused maintainer/rendering notes.
-- Project and download metadata config: `config/project.yml` and `config/osm_downloads.yml`; machine-local render state lives in ignored `config/local.yml`.
+- Project and OSM source metadata config: `config/project.yml` and `config/osm_sources.yml`; machine-local render state lives in ignored `config/local.yml`.
 - Example association data: `associations/sample__blair_highschool/` demonstrates boundary files, including a GeoJSON polygon with an interior exclusion/hole.
 
 ## Build, Test, and Development Commands

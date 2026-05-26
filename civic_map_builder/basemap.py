@@ -21,7 +21,7 @@ from .util import (
 import yaml
 
 APP_NAME = "civic-map-builder"
-DEFAULT_OSM_DOWNLOADS_CONFIG = "config/osm_downloads.yml"
+DEFAULT_OSM_SOURCES_CONFIG = "config/osm_sources.yml"
 
 ROAD_TAGS = {
     "motorway",
@@ -50,7 +50,7 @@ class BaseMapFeatures:
 
 @dataclass(frozen=True)
 class PreparedBaseMap:
-    download: str
+    osm_source: str
     source_url: str
     path: Path
     downloaded: bool
@@ -65,7 +65,7 @@ class ExtractedBaseMap:
 
 
 @dataclass(frozen=True)
-class DownloadOption:
+class OsmSource:
     label: str
     source_url: str
     filename: str
@@ -82,18 +82,18 @@ def default_cache_root() -> Path:
     return user_cache_path(APP_NAME, appauthor=False)
 
 
-def available_downloads() -> tuple[str, ...]:
-    return tuple(sorted(_download_options()))
+def available_osm_sources() -> tuple[str, ...]:
+    return tuple(sorted(_osm_sources()))
 
 
-def download_label(download: str) -> str:
-    return _download_option(download).label
+def osm_source_label(osm_source: str) -> str:
+    return _osm_source(osm_source).label
 
 
-def pbf_cache_path(download: str, cache_root: Path | None = None) -> Path:
-    option = _download_option(download)
+def pbf_cache_path(osm_source: str, cache_root: Path | None = None) -> Path:
+    source = _osm_source(osm_source)
     root = cache_root or default_cache_root()
-    return root / "osm" / "geofabrik" / option.filename
+    return root / "osm" / "geofabrik" / source.filename
 
 
 def project_extract_path(project_id: str, cache_root: Path | None = None) -> Path:
@@ -102,31 +102,32 @@ def project_extract_path(project_id: str, cache_root: Path | None = None) -> Pat
 
 
 def extraction_source_path(config: ProjectConfig, cache_root: Path | None = None) -> Path:
-    if config.base_map.download is not None:
-        download_path = pbf_cache_path(config.base_map.download, cache_root=cache_root)
-        if download_path.is_file():
-            return download_path
-        if config.base_map.pbf_path is not None and not _is_extract_path(
-            config.base_map.pbf_path,
+    if config.base_map.osm_source is not None:
+        source_path = pbf_cache_path(config.base_map.osm_source, cache_root=cache_root)
+        if source_path.is_file():
+            return source_path
+        if config.base_map.render_basemap is not None and not _is_extract_path(
+            config.base_map.render_basemap,
             cache_root=cache_root,
         ):
-            return _existing_pbf_path(config.base_map.pbf_path)
+            return _existing_pbf_path(config.base_map.render_basemap)
         raise CivicMapBuilderError(
-            f"Cached regional PBF not found: {download_path}. "
-            f"Run 'civic-map-builder basemap download {config.base_map.download}' first."
+            f"Cached OSM source PBF not found: {source_path}. "
+            f"Run 'civic-map-builder basemap download {config.base_map.osm_source}' first."
         )
 
-    if config.base_map.pbf_path is None:
+    if config.base_map.render_basemap is None:
         raise CivicMapBuilderError(
-            "base_map.pbf_path is not configured. "
-            "Run 'civic-map-builder basemap download <download>' first."
+            "base_map.osm_source is not configured and base_map.render_basemap is not set. "
+            "Run 'civic-map-builder basemap download <osm-source>' first."
         )
-    if _is_extract_path(config.base_map.pbf_path, cache_root=cache_root):
+    if _is_extract_path(config.base_map.render_basemap, cache_root=cache_root):
         raise CivicMapBuilderError(
-            "base_map.pbf_path points to a generated project extract, not a regional source PBF. "
-            "Configure base_map.download or set base_map.pbf_path to a regional .osm.pbf before extracting."
+            "base_map.render_basemap points to a generated project extract, not an OSM source PBF. "
+            "Run 'civic-map-builder basemap download <osm-source>' or "
+            "'civic-map-builder basemap use <osm-source>' before extracting."
         )
-    return _existing_pbf_path(config.base_map.pbf_path)
+    return _existing_pbf_path(config.base_map.render_basemap)
 
 
 def extraction_bbox(
@@ -212,25 +213,25 @@ def extract_basemap(
 
 def prepare_basemap(
     *,
-    download: str | None = None,
+    osm_source: str | None = None,
     config_path: Path | None = None,
     cache_root: Path | None = None,
     refresh: bool = False,
     progress: Callable[[int, int | None], None] | None = None,
 ) -> PreparedBaseMap:
     config = load_project_config(path=config_path)
-    selected_download = download or config.base_map.download
-    if selected_download is None:
+    selected_source = osm_source or config.base_map.osm_source
+    if selected_source is None:
         raise CivicMapBuilderError(
-            "base_map.download is not configured. Available options: "
-            + ", ".join(available_downloads())
+            "base_map.osm_source is not configured. Available options: "
+            + ", ".join(available_osm_sources())
         )
-    option = _download_option(selected_download)
-    target_path = pbf_cache_path(selected_download, cache_root=cache_root)
+    source = _osm_source(selected_source)
+    target_path = pbf_cache_path(selected_source, cache_root=cache_root)
     if target_path.exists() and not refresh:
         return PreparedBaseMap(
-            download=selected_download,
-            source_url=option.source_url,
+            osm_source=selected_source,
+            source_url=source.source_url,
             path=target_path,
             downloaded=False,
         )
@@ -245,7 +246,7 @@ def prepare_basemap(
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = target_path.with_suffix(target_path.suffix + ".part")
-    with requests.get(option.source_url, stream=True, timeout=30) as response:
+    with requests.get(source.source_url, stream=True, timeout=30) as response:
         response.raise_for_status()
         total_bytes = _content_length(response)
         received_bytes = 0
@@ -258,23 +259,25 @@ def prepare_basemap(
                         progress(received_bytes, total_bytes)
     temp_path.replace(target_path)
     return PreparedBaseMap(
-        download=selected_download,
-        source_url=option.source_url,
+        osm_source=selected_source,
+        source_url=source.source_url,
         path=target_path,
         downloaded=True,
     )
 
 
-def configured_pbf_path(config: BaseMapConfig) -> Path:
-    if config.pbf_path is None:
+def configured_render_basemap(config: BaseMapConfig) -> Path:
+    if config.render_basemap is None:
         raise CivicMapBuilderError(
-            "base_map.enabled is true, but base_map.pbf_path is not configured. "
-            "Run 'civic-map-builder basemap download <download>' or "
-            "'civic-map-builder basemap use <download>'."
+            "base_map.enabled is true, but base_map.render_basemap is not configured. "
+            "Run 'civic-map-builder basemap download <osm-source>' or "
+            "'civic-map-builder basemap use <osm-source>'."
         )
-    if not config.pbf_path.is_file():
-        raise CivicMapBuilderError(f"Configured base_map.pbf_path does not exist: {config.pbf_path}")
-    return config.pbf_path
+    if not config.render_basemap.is_file():
+        raise CivicMapBuilderError(
+            f"Configured base_map.render_basemap does not exist: {config.render_basemap}"
+        )
+    return config.render_basemap
 
 
 def load_basemap_features(
@@ -403,7 +406,7 @@ def _intersects_bounds(geometry: BaseGeometry, bounds: tuple[float, float, float
 
 def _existing_pbf_path(path: Path) -> Path:
     if not path.is_file():
-        raise CivicMapBuilderError(f"Configured base_map.pbf_path does not exist: {path}")
+        raise CivicMapBuilderError(f"Configured base_map.render_basemap does not exist: {path}")
     return path
 
 
@@ -471,8 +474,8 @@ def update_base_map_config(
     *,
     config_path: Path | None = None,
     enabled: bool | None = None,
-    download: str | None = None,
-    pbf_path: Path | None = None,
+    osm_source: str | None = None,
+    render_basemap: Path | None = None,
 ) -> None:
     write_local_config = config_path is None
     target_path = config_path or Path(DEFAULT_LOCAL_CONFIG)
@@ -486,12 +489,11 @@ def update_base_map_config(
 
     if enabled is not None:
         base_map["enabled"] = enabled
-    if download is not None:
-        _download_option(download)
-        if not write_local_config:
-            base_map["download"] = download
-    if pbf_path is not None:
-        base_map["pbf_path"] = str(pbf_path.expanduser().resolve())
+    if osm_source is not None:
+        _osm_source(osm_source)
+        base_map["osm_source"] = osm_source
+    if render_basemap is not None:
+        base_map["render_basemap"] = str(render_basemap.expanduser().resolve())
 
     if not write_local_config:
         base_map.setdefault("padding_ratio", 0.15)
@@ -500,58 +502,58 @@ def update_base_map_config(
     target_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf8")
 
 
-def _download_options(config_path: Path | None = None) -> dict[str, DownloadOption]:
-    path = config_path or Path(DEFAULT_OSM_DOWNLOADS_CONFIG)
-    data = _load_config_mapping(path, label="OSM downloads config")
-    downloads = data.get("downloads")
-    if not isinstance(downloads, Mapping):
-        raise CivicMapBuilderError(f"'downloads' must be a mapping/object in {path}")
+def _osm_sources(config_path: Path | None = None) -> dict[str, OsmSource]:
+    path = config_path or Path(DEFAULT_OSM_SOURCES_CONFIG)
+    data = _load_config_mapping(path, label="OSM sources config")
+    sources = data.get("osm_sources")
+    if not isinstance(sources, Mapping):
+        raise CivicMapBuilderError(f"'osm_sources' must be a mapping/object in {path}")
 
     options = {}
-    for key, value in downloads.items():
+    for key, value in sources.items():
         if not isinstance(key, str) or not key.strip():
-            raise CivicMapBuilderError(f"Download keys must be non-empty strings in {path}")
+            raise CivicMapBuilderError(f"OSM source keys must be non-empty strings in {path}")
         if not isinstance(value, Mapping):
-            raise CivicMapBuilderError(f"'downloads.{key}' must be a mapping/object in {path}")
-        options[key] = DownloadOption(
-            label=_required_download_str(value, "label", key, path),
-            source_url=_required_download_str(value, "source_url", key, path),
-            filename=_download_filename(value, key, path),
+            raise CivicMapBuilderError(f"'osm_sources.{key}' must be a mapping/object in {path}")
+        options[key] = OsmSource(
+            label=_required_source_str(value, "label", key, path),
+            source_url=_required_source_str(value, "source_url", key, path),
+            filename=_source_filename(value, key, path),
         )
     return options
 
 
-def _download_option(download: str) -> DownloadOption:
-    options = _download_options()
+def _osm_source(osm_source: str) -> OsmSource:
+    options = _osm_sources()
     try:
-        return options[download]
+        return options[osm_source]
     except KeyError as exc:
         raise CivicMapBuilderError(
-            f"Unknown base_map.download option '{download}'. "
+            f"Unknown base_map.osm_source option '{osm_source}'. "
             "Available options: " + ", ".join(sorted(options))
         ) from exc
 
 
-def _required_download_str(
+def _required_source_str(
     data: Mapping[str, Any],
     key: str,
-    download: str,
+    osm_source: str,
     config_path: Path,
 ) -> str:
     value = data.get(key)
     if not isinstance(value, str) or not value.strip():
         raise CivicMapBuilderError(
-            f"'downloads.{download}.{key}' must be a non-empty string in {config_path}"
+            f"'osm_sources.{osm_source}.{key}' must be a non-empty string in {config_path}"
         )
     return value
 
 
-def _download_filename(data: Mapping[str, Any], download: str, config_path: Path) -> str:
-    filename = _required_download_str(data, "filename", download, config_path)
+def _source_filename(data: Mapping[str, Any], osm_source: str, config_path: Path) -> str:
+    filename = _required_source_str(data, "filename", osm_source, config_path)
     path = Path(filename)
     if path.is_absolute() or path.name != filename:
         raise CivicMapBuilderError(
-            f"'downloads.{download}.filename' must be a filename, not a path, in {config_path}"
+            f"'osm_sources.{osm_source}.filename' must be a filename, not a path, in {config_path}"
         )
     return filename
 

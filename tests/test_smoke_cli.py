@@ -94,16 +94,20 @@ def test_basemap_download_cached_yes_updates_config(monkeypatch, tmp_path: Path)
         cache_path = tmp_path / "maryland-latest.osm.pbf"
         cache_path.write_bytes(b"cached")
         monkeypatch.setattr("civic_map_builder.cli.pbf_cache_path", lambda _download: cache_path)
+        monkeypatch.setattr(
+            "civic_map_builder.basemap.pbf_cache_path",
+            lambda _source, cache_root=None: cache_path,
+        )
 
         result = runner.invoke(app, ["basemap", "download", "maryland"], input="y\n")
 
         assert result.exit_code == 0
         assert "Using existing cached file" in result.stdout
         assert "Enabled base maps" in result.stdout
-        assert "pbf_path: " + str(cache_path) in Path(DEFAULT_LOCAL_CONFIG).read_text(
-            encoding="utf8"
-        )
-        assert "pbf_path: " not in Path("config/project.yml").read_text(
+        config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
+        assert "osm_source: maryland" in config_text
+        assert "render_basemap: " + str(cache_path) in config_text
+        assert "render_basemap: " not in Path("config/project.yml").read_text(
             encoding="utf8"
         )
 
@@ -114,6 +118,10 @@ def test_basemap_download_cached_no_leaves_config(monkeypatch, tmp_path: Path) -
         cache_path = tmp_path / "maryland-latest.osm.pbf"
         cache_path.write_bytes(b"cached")
         monkeypatch.setattr("civic_map_builder.cli.pbf_cache_path", lambda _download: cache_path)
+        monkeypatch.setattr(
+            "civic_map_builder.basemap.pbf_cache_path",
+            lambda _source, cache_root=None: cache_path,
+        )
 
         result = runner.invoke(app, ["basemap", "download", "maryland"], input="n\n")
 
@@ -133,10 +141,10 @@ def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) ->
 
         assert result.exit_code == 0
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
-        assert "download:" not in config_text
-        assert "pbf_path: " + str(cache_path) in config_text
+        assert "osm_source: district-of-columbia" in config_text
+        assert "render_basemap: " + str(cache_path) in config_text
         assert "enabled: true" in config_text
-        assert "download: district-of-columbia" not in Path(
+        assert "osm_source: district-of-columbia" not in Path(
             "config/project.yml"
         ).read_text(encoding="utf8")
 
@@ -148,7 +156,7 @@ def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: 
         _write_project_config(
             extra_lines=[
                 "base_map:",
-                "  download: maryland",
+                "  osm_source: maryland",
             ]
         )
         monkeypatch.setattr(
@@ -160,9 +168,9 @@ def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: 
 
         assert result.exit_code == 0
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
-        assert "pbf_path: " + str(extract_path) in config_text
+        assert "render_basemap: " + str(extract_path) in config_text
         assert "enabled: true" in config_text
-        assert ProjectConfig.load().base_map.download == "maryland"
+        assert ProjectConfig.load().base_map.osm_source == "maryland"
 
 
 def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) -> None:
@@ -181,7 +189,7 @@ def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) 
         assert "- extract: Project extract" in result.stdout
         assert "Select base map (extract, district-of-columbia, maryland)" in result.stdout
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
-        assert "pbf_path: " + str(extract_path) in config_text
+        assert "render_basemap: " + str(extract_path) in config_text
 
 
 def test_basemap_use_extract_fails_when_project_extract_missing(monkeypatch, tmp_path: Path) -> None:
@@ -220,7 +228,7 @@ def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None
         _write_project_config(
             extra_lines=[
                 "base_map:",
-                f"  pbf_path: {input_path}",
+                f"  render_basemap: {input_path}",
             ]
         )
         _write_association("alpha", "Alpha Association", -77.03, 39.0)
@@ -241,8 +249,9 @@ def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None
         assert "Output: " + str(extract_path) in result.stdout
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "enabled: true" in config_text
-        assert "pbf_path: " + str(extract_path) in config_text
-        assert "pbf_path: " + str(extract_path) not in Path(
+        assert "render_basemap: " + str(extract_path) in config_text
+        assert "osm_source:" not in config_text
+        assert "render_basemap: " + str(extract_path) not in Path(
             "config/project.yml"
         ).read_text(encoding="utf8")
 
@@ -255,7 +264,7 @@ def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> Non
         _write_project_config(
             extra_lines=[
                 "base_map:",
-                f"  pbf_path: {input_path}",
+                f"  render_basemap: {input_path}",
             ]
         )
         _write_association("alpha", "Alpha Association", -77.03, 39.0)
@@ -273,8 +282,8 @@ def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> Non
         assert result.exit_code == 0
         assert "Base-map config unchanged." in result.stdout
         config_text = Path("config/project.yml").read_text(encoding="utf8")
-        assert "pbf_path: " + str(input_path) in config_text
-        assert "pbf_path: " + str(extract_path) not in config_text
+        assert "render_basemap: " + str(input_path) in config_text
+        assert "render_basemap: " + str(extract_path) not in config_text
         assert not Path(DEFAULT_LOCAL_CONFIG).exists()
 
 
@@ -296,10 +305,10 @@ def _write_project_config(*, extra_lines: list[str] | None = None) -> None:
         ),
         encoding="utf8",
     )
-    Path("config/osm_downloads.yml").write_text(
+    Path("config/osm_sources.yml").write_text(
         "\n".join(
             [
-                "downloads:",
+                "osm_sources:",
                 "  district-of-columbia:",
                 "    label: District of Columbia",
                 "    source_url: https://example.test/district-of-columbia.osm.pbf",
