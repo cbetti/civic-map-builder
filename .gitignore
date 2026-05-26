@@ -4,6 +4,7 @@
 /.venv-wsl/
 __pycache__/
 *.py[cod]
+*.sw?
 /data/user_files/
 /outputs/
 /config/local.yml
