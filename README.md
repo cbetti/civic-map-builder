@@ -1,7 +1,7 @@
 # civic-map-builder
 
-A small CLI and boundary dataset for checking civic association GeoJSON files and
-rendering them as PNG maps.
+A small CLI and boundary dataset for checking civic association GeoJSON files in
+and near Montgomery County, Maryland, and rendering them as PNG maps.
 
 This repo has two parts: the map-building tool and the association boundary data.
 Contributors can add or improve boundaries under `associations/`; other groups
@@ -22,9 +22,9 @@ civic-map-builder render
 Useful commands:
 
 ```bash
-civic-map-builder new example_association
-civic-map-builder check example_association
-civic-map-builder preview example_association
+civic-map-builder new my_association
+civic-map-builder check my_association
+civic-map-builder preview my_association
 civic-map-builder render
 civic-map-builder release-assets --release-name YYYY-MM.N
 pytest
@@ -38,8 +38,8 @@ Each association has one folder under `associations/` with:
 - `boundary.md` for the association name, source link, and boundary text.
 - `boundary.geojson` for WGS84 longitude/latitude boundary coordinates.
 
-See `associations/sample__blair_highschool/` for an example, including a GeoJSON
-polygon with an interior exclusion/hole. For contribution steps, GeoJSON
+See `associations/sample__blair_highschool/` for a reference boundary file,
+including a GeoJSON polygon with an interior exclusion/hole. For contribution steps, GeoJSON
 expectations, and source policy, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Optional Base Maps
@@ -53,6 +53,10 @@ civic-map-builder basemap download maryland
 civic-map-builder basemap extract
 civic-map-builder render
 ```
+
+Rendering from a full OSM download is very slow. `basemap extract` cuts that
+download down to this project's map area, which makes repeated renders much
+faster.
 
 Download options live in `config/osm_downloads.yml`; project defaults live in
 `config/project.yml`; machine-local base-map state lives in ignored

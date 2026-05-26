@@ -306,9 +306,9 @@ last_updated: YYYY-MM-DD
 last_updated_by: TODO Name
 ---
 
-Paste the bylaw or authoritative boundary-description snippet here.
-Example: is bounded on the East by Main St, on the South by the CSX tracks, on the West
-by Pine Ave, and on the North by Vale Grove Park.
+Add notes from the bylaw, map, or other boundary source here.
+Sample boundary wording: bounded on the east by Main St, on the south by the CSX tracks,
+on the west by Pine Ave, and on the north by Grove Park.
 """
 
 

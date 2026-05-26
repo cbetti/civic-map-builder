@@ -1,7 +1,8 @@
 # Contributing
 
-This repo is both a civic-boundary dataset for the Montgomery County area and a
-small CLI for checking and rendering that data.
+This repo is both a civic-boundary dataset for associations in and near
+Montgomery County, Maryland, and a small CLI for checking and rendering that
+data.
 
 ## Add or update a boundary
 
@@ -10,7 +11,7 @@ small CLI for checking and rendering that data.
 3. Create/activate a venv (`python3 -m venv .venv`, `source .venv/bin/activate`; Windows PowerShell: `python -m venv .venv`, `.\.venv\Scripts\Activate.ps1`), then run `pip install -e ".[dev]"`.
 4. Create a folder with `civic-map-builder new my_association`, or edit an
    existing folder under `associations/`.
-5. Fill in `boundary.md` with the association name and a link to the source text.
+5. Fill in `boundary.md` with the association name and a link to the source.
 6. Edit `boundary.geojson`.
 7. Run:
 
@@ -27,7 +28,7 @@ small CLI for checking and rendering that data.
 - Use a single GeoJSON `Feature` with `Polygon` or `MultiPolygon` geometry.
 - Polygon rings must be closed: the first and last coordinate are identical.
 - To exclude an interior area, add it as an interior ring after the outer ring.
-- See `associations/sample__blair_highschool/` for an example with a hole.
+- See `associations/sample__blair_highschool/` for a reference boundary with a hole.
 - Recommended editing tools: geojson.io for quick edits, QGIS for careful GIS
   work, and Mapshaper for cleanup/conversion.
 
@@ -40,7 +41,7 @@ small CLI for checking and rendering that data.
 - Approximate boundaries are acceptable when the source is descriptive, but note
   uncertainty in the pull request.
 - Overlaps or disputed boundaries are reviewed by maintainers case by case.
-- Prefer the clearest source text over guesswork. If two sources conflict,
+- Prefer the clearest source material over guesswork. If two sources conflict,
   include both links and explain the conflict in the pull request.
 
 ## Code changes

@@ -1,5 +1,5 @@
 project_id: montgomery_county_area_associations
-description: Example civic association boundary contribution project.
+description: Montgomery County area civic association boundary dataset.
 associations_dir: associations
 outputs:
   previews: outputs/previews
