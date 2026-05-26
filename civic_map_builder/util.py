@@ -51,6 +51,11 @@ class ProjectConfig:
         """Load, validate, and resolve project configuration."""
         config_path = Path(path) if path is not None else Path(DEFAULT_PROJECT_CONFIG)
         if not config_path.is_file():
+            if path is None:
+                raise CivicMapBuilderError(
+                    f"Project config not found: {config_path}. "
+                    "Run civic-map-builder from the repository root."
+                )
             raise CivicMapBuilderError(f"Project config not found: {config_path}")
 
         raw = _load_mapping_file(config_path, label="Project config")

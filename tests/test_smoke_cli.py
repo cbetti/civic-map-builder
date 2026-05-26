@@ -23,6 +23,14 @@ def test_help_runs() -> None:
     assert "boundary contributions" in result.stdout.lower()
 
 
+def test_config_backed_command_requires_repository_root() -> None:
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["check"])
+
+        assert result.exit_code == 1
+        assert "Run civic-map-builder from the repository root." in result.stderr
+
+
 def test_new_command_creates_starter_files() -> None:
     with runner.isolated_filesystem():
         _write_project_config()
