@@ -83,10 +83,26 @@ def check(
 @app.command("preview")
 def preview(
     association_id: str = typer.Argument(..., help="Association identifier."),
+    include_frame: bool = typer.Option(
+        True,
+        "--frame/--no-frame",
+        help="Include the preview's outer pixel frame.",
+    ),
+    output_scale: int = typer.Option(
+        1,
+        "--output-scale",
+        min=1,
+        max=4,
+        help="Scale final preview image dimensions.",
+    ),
 ) -> None:
     """Render a focused boundary-only PNG preview."""
     try:
-        output_path = render.render_preview(association_id)
+        output_path = render.render_preview(
+            association_id,
+            include_frame=include_frame,
+            output_scale=output_scale,
+        )
     except CivicMapBuilderError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

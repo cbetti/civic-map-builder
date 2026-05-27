@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import shutil
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -79,17 +79,28 @@ POLYGON_PALETTE = (
 )
 
 
-def render_preview(association_id: str, *, config_path: Path | None = None) -> Path:
+def render_preview(
+    association_id: str,
+    *,
+    config_path: Path | None = None,
+    include_frame: bool = True,
+    output_scale: int = 1,
+) -> Path:
+    if output_scale < 1 or output_scale > 4:
+        raise CivicMapBuilderError("Preview output scale must be between 1 and 4.")
+
     config = load_project_config(path=config_path)
     selected = load_association(association_id, config_path=config_path)
     bounds = _padded_bounds(selected.geometry.bounds, config.base_map.padding_ratio)
+    style = _preview_style(include_frame=include_frame, output_scale=output_scale)
+    bounds = _fit_bounds_to_style_aspect(bounds, style)
 
     output_path = config.outputs.previews / f"{association_id}.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _render_png(
         output_path=output_path,
         associations=[selected],
-        style=PREVIEW_STYLE,
+        style=style,
         selected_id=selected.association_id,
         bounds=bounds,
         base_features=_maybe_load_basemap(config.base_map, bounds),
@@ -247,6 +258,21 @@ def _stage_attribution(source_map: Path, staged_map: Path) -> Path | None:
         return None
     shutil.copyfile(source_attribution, staged_attribution)
     return staged_attribution
+
+
+def _preview_style(*, include_frame: bool, output_scale: int) -> RenderStyle:
+    style = replace(PREVIEW_STYLE, padding=PREVIEW_STYLE.padding if include_frame else 0)
+    if output_scale == 1:
+        return style
+    return replace(
+        style,
+        width=style.width * output_scale,
+        height=style.height * output_scale,
+        padding=style.padding * output_scale,
+        outline_width=style.outline_width * output_scale,
+        outline_halo_width=style.outline_halo_width * output_scale,
+        label_size=style.label_size * output_scale,
+    )
 
 
 def _scaled_style(style: RenderStyle, pixel_scale: int) -> RenderStyle:
@@ -508,6 +534,38 @@ def _combined_bounds(geometries: list[BaseGeometry]) -> tuple[float, float, floa
     maxx = max(geometry.bounds[2] for geometry in geometries)
     maxy = max(geometry.bounds[3] for geometry in geometries)
     return minx, miny, maxx, maxy
+
+
+def _fit_bounds_to_style_aspect(
+    bounds: tuple[float, float, float, float],
+    style: RenderStyle,
+) -> tuple[float, float, float, float]:
+    minx, miny, maxx, maxy = bounds
+    width = maxx - minx
+    height = maxy - miny
+    if width == 0 or height == 0:
+        return bounds
+
+    usable_width = style.width - (style.padding * 2)
+    usable_height = style.height - (style.padding * 2)
+    if usable_width <= 0 or usable_height <= 0:
+        return bounds
+
+    center_lat = (miny + maxy) / 2
+    x_scale = math.cos(math.radians(center_lat))
+    projected_width = width * x_scale
+    target_aspect = usable_width / usable_height
+    current_aspect = projected_width / height
+
+    if current_aspect < target_aspect:
+        target_projected_width = height * target_aspect
+        target_width = target_projected_width / x_scale
+        padding = (target_width - width) / 2
+        return minx - padding, miny, maxx + padding, maxy
+
+    target_height = projected_width / target_aspect
+    padding = (target_height - height) / 2
+    return minx, miny - padding, maxx, maxy + padding
 
 
 def _padded_bounds(

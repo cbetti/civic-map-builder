@@ -50,7 +50,10 @@ def test_check_preview_and_render_smoke() -> None:
         _write_association("beta", "Beta Association", -77.02, 39.0)
 
         check_result = runner.invoke(app, ["check"])
-        preview_result = runner.invoke(app, ["preview", "alpha"])
+        preview_result = runner.invoke(
+            app,
+            ["preview", "alpha", "--no-frame", "--output-scale", "2"],
+        )
         render_result = runner.invoke(app, ["render"])
         release_result = runner.invoke(
             app,

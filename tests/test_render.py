@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
 from shapely.geometry import LineString, Polygon
 
 from civic_map_builder.basemap import BaseMapFeatures
@@ -46,6 +47,75 @@ def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
         "closeup.png",
     ]
     assert (tmp_path / "outputs/maps/closeup.png").is_file()
+
+
+def test_preview_output_scale_changes_final_image_dimensions(tmp_path: Path) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+
+    preview_path = render.render_preview("alpha", config_path=config_path, output_scale=3)
+
+    with Image.open(preview_path) as image:
+        assert image.size == (3600, 2700)
+
+
+def test_preview_can_render_without_outer_pixel_frame(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    rendered_styles: list[render.RenderStyle] = []
+
+    def fake_render_png(**kwargs) -> None:
+        rendered_styles.append(kwargs["style"])
+        kwargs["output_path"].write_bytes(b"png")
+
+    monkeypatch.setattr(render, "_render_png", fake_render_png)
+
+    render.render_preview("alpha", config_path=config_path, include_frame=False, output_scale=2)
+
+    assert rendered_styles[0].padding == 0
+    assert rendered_styles[0].width == 2400
+    assert rendered_styles[0].height == 1800
+
+
+def test_preview_expands_loaded_bounds_to_fill_canvas_aspect(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  enabled: true",
+            f"  render_basemap: {tmp_path / 'basemap.osm.pbf'}",
+            "  padding_ratio: 0",
+        ],
+    )
+    (tmp_path / "basemap.osm.pbf").write_bytes(b"pbf")
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    loaded_bounds: list[tuple[float, float, float, float]] = []
+
+    def fake_load_basemap_features(**kwargs):
+        loaded_bounds.append(kwargs["bounds"])
+        return None
+
+    monkeypatch.setattr(render, "load_basemap_features", fake_load_basemap_features)
+
+    render.render_preview("alpha", config_path=config_path, include_frame=False)
+
+    minx, miny, maxx, maxy = loaded_bounds[0]
+    assert minx < -77.03
+    assert maxx > -77.026
+    assert miny == 39.0
+    assert maxy == 39.004
+
+
+def test_preview_output_scale_must_be_in_supported_range(tmp_path: Path) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+
+    try:
+        render.render_preview("alpha", config_path=config_path, output_scale=5)
+    except CivicMapBuilderError as exc:
+        assert "between 1 and 4" in str(exc)
+    else:
+        raise AssertionError("Expected invalid preview scale to fail")
 
 
 def test_render_regional_map_includes_sample_associations_by_default(
