@@ -100,6 +100,28 @@ def test_release_assets_excludes_sample_associations_by_default(
     ]
 
 
+def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_project_config(tmp_path)
+    map_path = tmp_path / "outputs/maps/regional-boundaries.png"
+    attribution_path = map_path.with_suffix(".txt")
+    map_path.parent.mkdir(parents=True)
+    map_path.write_bytes(b"png")
+    attribution_path.write_text(render.BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
+    monkeypatch.setattr(
+        render,
+        "render_regional_map",
+        lambda **_kwargs: [map_path],
+    )
+
+    release_dir = render.stage_release_assets("2026-05.1", config_path=config_path)
+
+    staged_attribution = release_dir / "regional-boundaries-2026-05.1.txt"
+    assert staged_attribution.read_text(encoding="utf8") == render.BASEMAP_ATTRIBUTION + "\n"
+    assert f"- Attribution: `{staged_attribution.name}`" in (
+        release_dir / "README.md"
+    ).read_text(encoding="utf8")
+
+
 def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch) -> None:
     config_path = _write_project_config(tmp_path)
     _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
