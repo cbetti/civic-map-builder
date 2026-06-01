@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -13,6 +14,7 @@ class CivicMapBuilderError(Exception):
 
 DEFAULT_PROJECT_CONFIG = "config/project.yml"
 DEFAULT_LOCAL_CONFIG = "config/local.yml"
+PUBLIC_SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 @dataclass(frozen=True)
@@ -204,6 +206,11 @@ def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig
     for name, view_data in views_data.items():
         if not isinstance(name, str) or not name:
             raise CivicMapBuilderError(f"'base_map.views' names must be non-empty strings in {config_path}")
+        if not PUBLIC_SLUG_RE.fullmatch(name):
+            raise CivicMapBuilderError(
+                "'base_map.views' names must be lowercase kebab-case filename slugs "
+                f"in {config_path}: {name}"
+            )
         views.append(BaseMapView(name=name, bbox=_bbox_from_config(view_data, config_path)))
 
     return BaseMapConfig(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 from PIL import Image
@@ -185,11 +186,74 @@ def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch)
 
     release_dir = render.stage_release_assets("2026-05.1", config_path=config_path)
 
-    staged_attribution = release_dir / "regional-boundaries-2026-05.1.txt"
+    staged_attribution = release_dir / "test-project-2026-05.1.txt"
     assert staged_attribution.read_text(encoding="utf8") == render.BASEMAP_ATTRIBUTION + "\n"
-    assert f"- Attribution: `{staged_attribution.name}`" in (
-        release_dir / "README.md"
-    ).read_text(encoding="utf8")
+    readme_text = (release_dir / "README.txt").read_text(encoding="utf8")
+    assert f"- Attribution: {staged_attribution.name}" in readme_text
+
+
+def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        project_id="montgomery_county_area_associations",
+    )
+    map_path = tmp_path / "outputs/maps/regional-boundaries.png"
+    attribution_path = map_path.with_suffix(".txt")
+    map_path.parent.mkdir(parents=True)
+    map_path.write_bytes(b"png")
+    attribution_path.write_text(render.BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
+    monkeypatch.setattr(render, "render_regional_map", lambda **_kwargs: [map_path])
+
+    release_dir = render.stage_release_assets("2026-05.1", config_path=config_path)
+
+    assert (release_dir / "montgomery-county-area-associations-2026-05.1.png").is_file()
+    assert (release_dir / "montgomery-county-area-associations-2026-05.1.txt").is_file()
+    assert (release_dir / "README.txt").is_file()
+    assert not (release_dir / "README.md").exists()
+    zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
+    with zipfile.ZipFile(zip_path) as release_zip:
+        assert sorted(release_zip.namelist()) == [
+            "README.txt",
+            "montgomery-county-area-associations-2026-05.1.png",
+            "montgomery-county-area-associations-2026-05.1.txt",
+        ]
+
+
+def test_release_assets_prefixes_named_views_with_public_project_slug(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        project_id="montgomery_county_area_associations",
+    )
+    default_map = tmp_path / "outputs/maps/regional-boundaries.png"
+    view_map = tmp_path / "outputs/maps/north-hills.png"
+    default_map.parent.mkdir(parents=True)
+    default_map.write_bytes(b"default")
+    view_map.write_bytes(b"view")
+    monkeypatch.setattr(
+        render,
+        "render_regional_map",
+        lambda **_kwargs: [default_map, view_map],
+    )
+
+    release_dir = render.stage_release_assets("2026-05.1", config_path=config_path)
+
+    assert (release_dir / "montgomery-county-area-associations-2026-05.1.png").is_file()
+    assert (
+        release_dir / "montgomery-county-area-associations-north-hills-2026-05.1.png"
+    ).is_file()
+    zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
+    with zipfile.ZipFile(zip_path) as release_zip:
+        assert sorted(release_zip.namelist()) == [
+            "README.txt",
+            "montgomery-county-area-associations-2026-05.1.png",
+            "montgomery-county-area-associations-north-hills-2026-05.1.png",
+        ]
 
 
 def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch) -> None:
@@ -232,14 +296,19 @@ def test_enabled_basemap_requires_configured_render_basemap(tmp_path: Path) -> N
         raise AssertionError("Expected missing render_basemap to fail")
 
 
-def _write_project_config(root: Path, *, extra_lines: list[str] | None = None) -> Path:
+def _write_project_config(
+    root: Path,
+    *,
+    project_id: str = "test_project",
+    extra_lines: list[str] | None = None,
+) -> Path:
     extra_lines = extra_lines or []
     config_path = root / "config/project.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         "\n".join(
             [
-                'project_id: "test_project"',
+                f'project_id: "{project_id}"',
                 'associations_dir: "associations"',
                 "outputs:",
                 '  previews: "outputs/previews"',

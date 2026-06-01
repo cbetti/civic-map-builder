@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import shutil
+import zipfile
 import zlib
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -153,25 +154,32 @@ def stage_release_assets(
 
     release_dir = config.outputs.release / release_name
     release_dir.mkdir(parents=True, exist_ok=True)
+    project_slug = _public_project_slug(config.project_id)
     staged_maps = []
     staged_attributions = []
     for map_path in map_paths:
-        staged_map = release_dir / f"{map_path.stem}-{release_name}.png"
+        staged_map = (
+            release_dir / f"{_release_asset_stem(project_slug, map_path)}-{release_name}.png"
+        )
         shutil.copyfile(map_path, staged_map)
         staged_maps.append(staged_map)
         staged_attribution = _stage_attribution(map_path, staged_map)
         if staged_attribution is not None:
             staged_attributions.append(staged_attribution)
-    (release_dir / "README.md").write_text(
+    readme_path = release_dir / "README.txt"
+    stale_markdown_readme = release_dir / "README.md"
+    if stale_markdown_readme.exists():
+        stale_markdown_readme.unlink()
+    readme_path.write_text(
         "\n".join(
             [
-                f"# civic-map-builder {release_name}",
+                f"civic-map-builder {release_name}",
                 "",
                 "Generated release assets for manual upload to a GitHub Release.",
                 "",
-                *[f"- Map: `{staged_map.name}`" for staged_map in staged_maps],
+                *[f"- Map: {staged_map.name}" for staged_map in staged_maps],
                 *[
-                    f"- Attribution: `{staged_attribution.name}`"
+                    f"- Attribution: {staged_attribution.name}"
                     for staged_attribution in staged_attributions
                 ],
                 f"- Generated at: {datetime.now(timezone.utc).isoformat()}",
@@ -179,6 +187,10 @@ def stage_release_assets(
             ]
         ),
         encoding="utf8",
+    )
+    _write_release_zip(
+        release_dir / f"{project_slug}-{release_name}.zip",
+        [readme_path, *staged_maps, *staged_attributions],
     )
     return release_dir
 
@@ -258,6 +270,26 @@ def _stage_attribution(source_map: Path, staged_map: Path) -> Path | None:
         return None
     shutil.copyfile(source_attribution, staged_attribution)
     return staged_attribution
+
+
+def _public_project_slug(project_id: str) -> str:
+    return project_id.replace("_", "-")
+
+
+def _release_asset_stem(project_slug: str, map_path: Path) -> str:
+    if map_path.stem == "regional-boundaries":
+        return project_slug
+    return f"{project_slug}-{map_path.stem}"
+
+
+def _write_release_zip(zip_path: Path, files: list[Path]) -> None:
+    with zipfile.ZipFile(
+        zip_path,
+        mode="w",
+        compression=zipfile.ZIP_DEFLATED,
+    ) as release_zip:
+        for path in files:
+            release_zip.write(path, arcname=path.name)
 
 
 def _preview_style(*, include_frame: bool, output_scale: int) -> RenderStyle:

@@ -45,6 +45,29 @@ def test_base_map_config_parses_named_views(tmp_path: Path) -> None:
     assert config.base_map.views[0].bbox == (-77.2, 38.8, -76.8, 39.2)
 
 
+@pytest.mark.parametrize("view_name", ["North Hills", "north_hills", "north/hills"])
+def test_base_map_config_rejects_unsafe_view_names(
+    tmp_path: Path,
+    view_name: str,
+) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  views:",
+            f"    {view_name}:",
+            "      bbox: [-77.2, 38.8, -76.8, 39.2]",
+        ],
+    )
+
+    with pytest.raises(CivicMapBuilderError) as exc_info:
+        ProjectConfig.load(config_path)
+
+    assert "'base_map.views' names must be lowercase kebab-case filename slugs" in str(
+        exc_info.value
+    )
+
+
 def test_project_config_load_applies_only_local_base_map_runtime_keys(
     monkeypatch,
     tmp_path: Path,

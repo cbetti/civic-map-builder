@@ -66,7 +66,8 @@ def test_check_preview_and_render_smoke() -> None:
         assert release_result.exit_code == 0
         assert Path("outputs/previews/alpha.png").is_file()
         assert Path("outputs/maps/regional-boundaries.png").is_file()
-        assert Path("outputs/release/2026-05.1/regional-boundaries-2026-05.1.png").is_file()
+        assert Path("outputs/release/2026-05.1/test-project-2026-05.1.png").is_file()
+        assert Path("outputs/release/2026-05.1/test-project-2026-05.1.zip").is_file()
 
 
 def test_basemap_status_and_off_smoke() -> None:
