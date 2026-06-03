@@ -20,9 +20,20 @@ Use this when a fresh public map is worth publishing.
    `--include-samples` only when a sample boundary should be part of the staged
    release assets.
 
-4. Create a GitHub Release with the same date-based name, such as `2026-05.1`.
-5. Upload the generated zip and loose PNG/TXT files from
-   `outputs/release/YYYY-MM.N/`.
+4. Review the staged assets under `outputs/release/YYYY-MM.N/`.
+5. If the release looks good, tag the commit and push tags:
+
+   ```bash
+   git tag vYYYY-MM.N
+   git push --tags
+   ```
+
+   For example, release `2026-06.1` uses the tag `v2026-06.1`
+
+6. Create a GitHub Release named with the public release asset stem, such as
+   `montgomery-county-area-associations-2026-06.1`, and associate it with the
+   matching `vYYYY-MM.N` tag.
+7. Upload the generated zip from `outputs/release/YYYY-MM.N/`.
 
 Release asset names use the project id from `config/project.yml` with
 underscores converted to hyphens. Additional configured map views use their

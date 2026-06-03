@@ -1,93 +1,75 @@
-# civic-map-builder
+# Montgomery County Area Civic Association Map
 
-A small CLI and boundary dataset for checking civic association GeoJSON files in
-and near Montgomery County, Maryland, and rendering them as PNG maps.
+A public map and open boundary dataset for civic, neighborhood, and community
+associations in and near Montgomery County, Maryland.
 
-This repo has two parts: the map-building tool and the association boundary data.
-Contributors can add or improve boundaries under `associations/`; other groups
-can reuse the tool with their own GeoJSON boundary files.
+## Why this exists
 
-## Quick Start
+Residents often do not know which civic or neighborhood association covers their
+home.
 
-```bash
-git clone <repo-url>
-cd civic-map-builder
-python3 -m venv .venv  # Windows PowerShell: python -m venv .venv
-source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-pip install -e ".[dev]"
-civic-map-builder check
-civic-map-builder render
-```
+That creates extra work for residents, association volunteers, and neighboring
+groups with overlapping or hard-to-find boundary descriptions.
 
-Useful commands:
+This project is meant to make the answer easier to find and easier to keep
+accurate.
 
-```bash
-civic-map-builder new my_association
-civic-map-builder check my_association
-civic-map-builder preview my_association
-civic-map-builder render
-civic-map-builder release-assets --release-name YYYY-MM.N
-pytest
-ruff check civic_map_builder tests
-```
+## View the current map
 
-## Boundary Data
+The latest published map is available on the GitHub Releases page:
 
-Each association has one folder under `associations/` with:
+[View the latest map release](https://github.com/cbetti/civic-map-builder/releases/latest)
 
-- `boundary.md` for the association name, source link, and boundary text.
-- `boundary.geojson` for WGS84 longitude/latitude boundary coordinates.
+Each release may include PNG map images and downloadable boundary data.
 
-See `associations/sample__blair_highschool/` for a reference boundary file,
-including a GeoJSON polygon with an interior exclusion/hole. For contribution steps, GeoJSON
-expectations, and source policy, see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+## Add or correct a boundary
 
-## Optional Base Maps
+You do not need to know GitHub, Python, GIS, or GeoJSON to contribute.
 
-Boundary-only rendering works without OpenStreetMap data. To render with OSM
-context:
+The most useful thing is accurate source information: an association name, a
+website, bylaws, a map image, a PDF, a list of streets, notes about uncertainty,
+or boundary data from a mapping tool.
 
-```bash
-pip install -e ".[dev,basemap]"
-civic-map-builder basemap download maryland
-civic-map-builder basemap extract
-civic-map-builder render
-```
+GeoJSON copied from geojson.io, a shapefile, KML, or other GIS data is welcome,
+but it is not required.
 
-Rendering from a full OSM download is very slow. `basemap extract` cuts that
-download down to this project's map area, which makes repeated renders much
-faster.
+Approximate or descriptive boundaries are still useful if you say where the
+information came from and what parts are uncertain.
 
-OSM sources live in `config/osm_sources.yml`; project defaults live in
-`config/project.yml`; machine-local `render_basemap` state lives in ignored
-`config/local.yml`. Downloaded OSM data and generated PNGs are not committed.
+Technical contributors can also submit a pull request. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Maintainers
+## What belongs in the dataset
 
-Run commands from the repository root so `config/project.yml` resolves correctly.
-For publishing map assets, see [`docs/maintainer_release.md`](docs/maintainer_release.md).
+This project is for civic, neighborhood, community, and similar local
+associations in and near Montgomery County, Maryland.
 
-## Licensing
+The dataset is most useful when each boundary includes the association's public
+name, a public or verifiable source, boundary geometry, and notes about
+uncertainty or overlap.
 
-This project uses a hybrid model to keep the tooling open and the data completely
-unrestricted:
+## Reusing the data
 
-* **Software & Tooling:** All Python source code (`civic_map_builder/`), CLI scripts,
-  configuration workflows, and tests are licensed under the **MIT License**. See the
-  [LICENSE](LICENSE) file for details.
-* **Geospatial Data:** All GeoJSON boundaries and metadata located within the
-  `associations/` directory are dedicated to the public domain under the **Creative
-  Commons Zero (CC0 1.0 Universal)** dedication. You are completely free to use, modify,
-  and distribute this data without any legal restrictions or attribution requirements.
+The boundary data is intended to be reusable by associations, residents,
+researchers, civic groups, local websites, and other mapping projects.
 
-*Note: While credit is legally not required under CC0, we kindly request that you spread
-the word or link back to this repository. This helps other local organizations discover
-the project and contribute back to keep our regional data accurate!*
+Geospatial data in the `associations/` directory is dedicated to the public
+domain under CC0 1.0. You may use, copy, modify, and redistribute it without
+legal restrictions.
 
-## Known Limitations
+Credit is appreciated because it helps other groups find the project and
+contribute improvements.
 
-Cross-border base-map extracts work best when `basemap extract` can cut a
-bounding box from one consolidated parent PBF; using two separate regional PBFs
-currently requires manually merging matching-date files with `osmium merge`
-before extraction. A future enhancement may automate that merge-then-extract
-workflow for projects that span configured OSM source regions.
+The software tools in this repository are licensed separately under the MIT
+License.
+
+## For developers and maintainers
+
+This repository also contains a Python command-line tool for validating
+association boundary files and rendering map assets.
+
+Developer setup, rendering, basemap, and release instructions live in:
+
+- [Technical setup](docs/technical_setup.md)
+- [Maintainer release process](docs/maintainer_release.md)
+- [Contributing](CONTRIBUTING.md)
