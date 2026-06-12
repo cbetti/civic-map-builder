@@ -13,6 +13,7 @@ authors = [
   { name = "Chris Betti", email = "cbetti@gmail.com" }
 ]
 dependencies = [
+  "click>=8.0.0",
   "typer>=0.12.0",
   "pillow>=10.0.0",
   "shapely>=2.0.0",

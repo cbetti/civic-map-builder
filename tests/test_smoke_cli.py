@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+import os
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 
 from typer.testing import CliRunner
@@ -9,6 +13,17 @@ from civic_map_builder.cli import app
 from civic_map_builder.util import DEFAULT_LOCAL_CONFIG, ProjectConfig
 
 runner = CliRunner()
+
+
+@contextmanager
+def isolated_filesystem() -> Iterator[Path]:
+    original_cwd = Path.cwd()
+    with tempfile.TemporaryDirectory() as directory:
+        os.chdir(directory)
+        try:
+            yield Path(directory)
+        finally:
+            os.chdir(original_cwd)
 
 
 def test_version_runs() -> None:
@@ -24,7 +39,7 @@ def test_help_runs() -> None:
 
 
 def test_config_backed_command_requires_repository_root() -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         result = runner.invoke(app, ["check"])
 
         assert result.exit_code == 1
@@ -32,7 +47,7 @@ def test_config_backed_command_requires_repository_root() -> None:
 
 
 def test_new_command_creates_starter_files() -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
 
         result = runner.invoke(app, ["new", "example_association"])
@@ -44,7 +59,7 @@ def test_new_command_creates_starter_files() -> None:
 
 
 def test_check_preview_and_render_smoke() -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
         _write_association("alpha", "Alpha Association", -77.03, 39.0)
         _write_association("beta", "Beta Association", -77.02, 39.0)
@@ -71,7 +86,7 @@ def test_check_preview_and_render_smoke() -> None:
 
 
 def test_basemap_status_and_off_smoke() -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
 
         help_result = runner.invoke(app, ["basemap", "--help"])
@@ -93,7 +108,7 @@ def test_basemap_extract_help_runs() -> None:
 
 
 def test_basemap_download_cached_yes_updates_config(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
         cache_path = tmp_path / "maryland-latest.osm.pbf"
         cache_path.write_bytes(b"cached")
@@ -117,7 +132,7 @@ def test_basemap_download_cached_yes_updates_config(monkeypatch, tmp_path: Path)
 
 
 def test_basemap_download_cached_no_leaves_config(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
         cache_path = tmp_path / "maryland-latest.osm.pbf"
         cache_path.write_bytes(b"cached")
@@ -135,7 +150,7 @@ def test_basemap_download_cached_no_leaves_config(monkeypatch, tmp_path: Path) -
 
 
 def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
         cache_path = tmp_path / "district-of-columbia-latest.osm.pbf"
         cache_path.write_bytes(b"cached")
@@ -154,7 +169,7 @@ def test_basemap_use_switches_to_cached_download(monkeypatch, tmp_path: Path) ->
 
 
 def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         extract_path = tmp_path / "test_project-basemap.osm.pbf"
         extract_path.write_bytes(b"extract")
         _write_project_config(
@@ -178,7 +193,7 @@ def test_basemap_use_extract_switches_to_project_extract(monkeypatch, tmp_path: 
 
 
 def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         extract_path = tmp_path / "test_project-basemap.osm.pbf"
         extract_path.write_bytes(b"extract")
         _write_project_config()
@@ -191,13 +206,15 @@ def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) 
 
         assert result.exit_code == 0
         assert "- extract: Project extract" in result.stdout
-        assert "Select base map (extract, district-of-columbia, maryland)" in result.stdout
+        assert "- district-of-columbia: District of Columbia" in result.stdout
+        assert "- maryland: Maryland" in result.stdout
+        assert "Select base map:" in result.stdout
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "render_basemap: " + str(extract_path) in config_text
 
 
 def test_basemap_use_extract_fails_when_project_extract_missing(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         missing_path = tmp_path / "missing-basemap.osm.pbf"
         _write_project_config()
         monkeypatch.setattr(
@@ -212,7 +229,7 @@ def test_basemap_use_extract_fails_when_project_extract_missing(monkeypatch, tmp
 
 
 def test_basemap_use_fails_when_cached_file_missing(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         _write_project_config()
         missing_path = tmp_path / "missing.osm.pbf"
         monkeypatch.setattr("civic_map_builder.cli.pbf_cache_path", lambda _download: missing_path)
@@ -224,7 +241,7 @@ def test_basemap_use_fails_when_cached_file_missing(monkeypatch, tmp_path: Path)
 
 
 def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         input_path = tmp_path / "maryland-latest.osm.pbf"
         input_path.write_bytes(b"pbf")
         extract_path = tmp_path / "test_project-basemap.osm.pbf"
@@ -261,7 +278,7 @@ def test_basemap_extract_yes_updates_config(monkeypatch, tmp_path: Path) -> None
 
 
 def test_basemap_extract_no_preserves_config(monkeypatch, tmp_path: Path) -> None:
-    with runner.isolated_filesystem():
+    with isolated_filesystem():
         input_path = tmp_path / "maryland-latest.osm.pbf"
         input_path.write_bytes(b"pbf")
         extract_path = tmp_path / "test_project-basemap.osm.pbf"
