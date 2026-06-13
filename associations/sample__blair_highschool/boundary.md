@@ -3,7 +3,7 @@ name: Sample - Blair High School
 boundary_confidence: draft
 bylaws_source_url:
 last_updated: 2026-05-21
-last_updated_by: Chris Betti
+association_contact:
 ---
 
 This sample entry demonstrates how to encode a larger association-style boundary

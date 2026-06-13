@@ -41,6 +41,8 @@ ruff check civic_map_builder tests
 Each association has one folder under `associations/`.
 
 `boundary.md` stores the association name, source link, and boundary notes.
+The optional `association_contact` field names the association person engaged on
+boundary review or clarification; leave it blank if no contact is known.
 
 Use `boundary_confidence` in the front matter to summarize confidence in the
 mapped boundary:

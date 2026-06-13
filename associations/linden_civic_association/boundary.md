@@ -3,7 +3,7 @@ name: Linden Civic Association
 boundary_confidence: confirmed
 bylaws_source_url:
 last_updated: 2026-06-09
-last_updated_by: Ramesh Kurup
+association_contact: Ramesh Kurup
 ---
 
 North Boundary: Capitol Beltway

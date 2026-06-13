@@ -60,6 +60,10 @@ def test_new_command_creates_starter_files() -> None:
             "boundary_confidence: draft"
             in Path("associations/example_association/boundary.md").read_text(encoding="utf8")
         )
+        assert (
+            "association_contact:"
+            in Path("associations/example_association/boundary.md").read_text(encoding="utf8")
+        )
 
 
 def test_check_preview_and_render_smoke() -> None:

@@ -3,7 +3,7 @@ name: North Woodside Citizens Association
 boundary_confidence: confirmed
 bylaws_source_url: https://northwoodside.org/wp-content/uploads/2026/05/nwcabylaws.2026.05.20.pdf
 last_updated: 2026-05-26
-last_updated_by: Anna White
+association_contact: Anna White
 ---
 
 bounded on the north by Brookville Road and Seminary Road, on the east by Georgia Avenue

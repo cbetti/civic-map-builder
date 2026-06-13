@@ -321,7 +321,7 @@ name: TODO Association Name
 boundary_confidence: draft
 bylaws_source_url:
 last_updated: YYYY-MM-DD
-last_updated_by: TODO Name
+association_contact:
 ---
 
 Add notes from the bylaw, map, or other boundary source here.

@@ -65,6 +65,9 @@ the association:
 - `confirmed` for clear current source information with no known material
   ambiguity.
 
+Use `association_contact` for the association person engaged on boundary review
+or clarification. Leave it blank if nobody at the association has engaged.
+
 Approximate boundaries are acceptable when the source is descriptive.
 
 If two sources conflict, include both and explain the conflict.

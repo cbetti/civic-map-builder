@@ -3,7 +3,7 @@ name: Seven Oaks Evanswood Citizens Association
 boundary_confidence: confirmed
 bylaws_source_url: https://www.soeca.org/about-us/
 last_updated: 2026-05-28
-last_updated_by: Chris Betti
+association_contact: Chris Reynolds
 ---
 
 Colesville Road on the West, Cedar and Fenton Streets on the South, Bonifant and Wayne on
