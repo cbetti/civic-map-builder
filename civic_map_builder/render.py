@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 import shutil
-import zipfile
 import zlib
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -181,10 +180,6 @@ def stage_release_assets(
         stale_readme.unlink()
     if stale_markdown_readme.exists():
         stale_markdown_readme.unlink()
-    _write_release_zip(
-        release_dir / f"{project_slug}-{release_name}.zip",
-        [*staged_maps, attribution_path],
-    )
     return release_dir
 
 
@@ -330,16 +325,6 @@ def _release_asset_stem(project_slug: str, map_path: Path) -> str:
     if map_path.stem == "regional-boundaries":
         return project_slug
     return f"{project_slug}-{map_path.stem}"
-
-
-def _write_release_zip(zip_path: Path, files: list[Path]) -> None:
-    with zipfile.ZipFile(
-        zip_path,
-        mode="w",
-        compression=zipfile.ZIP_DEFLATED,
-    ) as release_zip:
-        for path in files:
-            release_zip.write(path, arcname=path.name)
 
 
 def _preview_style(*, include_frame: bool, output_scale: int) -> RenderStyle:

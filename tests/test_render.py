@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-import zipfile
 from pathlib import Path
 
 import pytest
@@ -272,7 +271,7 @@ def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch)
     assert not (release_dir / "README.txt").exists()
 
 
-def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
+def test_release_assets_uses_public_project_slug_without_zip(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -293,12 +292,6 @@ def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
     assert (release_dir / "montgomery-county-area-associations-2026-05.1.txt").is_file()
     assert not (release_dir / "README.txt").exists()
     assert not (release_dir / "README.md").exists()
-    zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
-    with zipfile.ZipFile(zip_path) as release_zip:
-        assert sorted(release_zip.namelist()) == [
-            "montgomery-county-area-associations-2026-05.1.png",
-            "montgomery-county-area-associations-2026-05.1.txt",
-        ]
 
 
 def test_release_assets_prefixes_named_views_with_public_project_slug(
@@ -337,13 +330,6 @@ def test_release_assets_prefixes_named_views_with_public_project_slug(
     assert not (
         release_dir / "montgomery-county-area-associations-north-hills-2026-05.1.txt"
     ).exists()
-    zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
-    with zipfile.ZipFile(zip_path) as release_zip:
-        assert sorted(release_zip.namelist()) == [
-            "montgomery-county-area-associations-2026-05.1.png",
-            "montgomery-county-area-associations-2026-05.1.txt",
-            "montgomery-county-area-associations-north-hills-2026-05.1.png",
-        ]
 
 
 def test_release_footer_text_uses_repository_project_and_release() -> None:
