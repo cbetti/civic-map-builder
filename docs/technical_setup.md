@@ -53,6 +53,9 @@ mapped boundary:
 - `confirmed`: clear current source information with no known material
   ambiguity in the mapped boundary.
 
+Use `known_overlaps` only for actual, intentional association overlaps. Both
+affected association files must list each other by association id.
+
 `boundary.geojson` stores WGS84 longitude/latitude boundary coordinates.
 
 See `associations/sample__blair_highschool/` for a reference boundary with a

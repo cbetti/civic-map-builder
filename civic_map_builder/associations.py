@@ -104,14 +104,17 @@ def check_associations(
 ) -> CheckResult:
     config = load_project_config(path=config_path)
     result = CheckResult()
+    all_directories = list_association_dirs(config)
     if association_id:
         directory = config.associations_dir / association_id
         if not directory.exists():
             result.errors.append(f"Association not found: {association_id}")
             return result
         directories = [directory]
+        scope_ids = {association_id}
     else:
-        directories = list_association_dirs(config)
+        directories = all_directories
+        scope_ids = None
 
     loaded: list[Association] = []
     for directory in directories:
@@ -120,7 +123,10 @@ def check_associations(
         if association is not None:
             loaded.append(association)
 
-    result.warnings.extend(_overlap_warnings(loaded))
+    context = loaded
+    if association_id and loaded:
+        context = _load_overlap_context(all_directories, loaded)
+    result.extend(_overlap_result(context, scope_ids=scope_ids))
     return result
 
 
@@ -281,16 +287,118 @@ def _iter_points(value: Any) -> Iterable[tuple[float, float]]:
             yield from _iter_points(item)
 
 
-def _overlap_warnings(associations: list[Association]) -> list[str]:
-    warnings: list[str] = []
+def _load_overlap_context(
+    directories: list[Path],
+    loaded: list[Association],
+) -> list[Association]:
+    loaded_by_id = {association.association_id: association for association in loaded}
+    context = list(loaded)
+    for directory in directories:
+        if directory.name in loaded_by_id:
+            continue
+        try:
+            context.append(_load_association_dir(directory))
+        except CivicMapBuilderError:
+            continue
+    return context
+
+
+def _overlap_result(
+    associations: list[Association],
+    *,
+    scope_ids: set[str] | None = None,
+) -> CheckResult:
+    result = CheckResult()
+    by_id = {association.association_id: association for association in associations}
+    known_overlaps = _known_overlaps(associations, result)
+    geometric_overlaps = set()
+
     for index, left in enumerate(associations):
         for right in associations[index + 1 :]:
             if left.geometry.intersection(right.geometry).area > 0:
-                warnings.append(
+                pair = frozenset({left.association_id, right.association_id})
+                geometric_overlaps.add(pair)
+                if scope_ids is not None and not pair.intersection(scope_ids):
+                    continue
+                left_declares = right.association_id in known_overlaps[left.association_id]
+                right_declares = left.association_id in known_overlaps[right.association_id]
+                if left_declares and right_declares:
+                    continue
+                if left_declares != right_declares:
+                    declarer, missing = (
+                        (left, right) if left_declares else (right, left)
+                    )
+                    result.errors.append(
+                        f"{declarer.association_id}: known_overlaps lists "
+                        f"{missing.association_id}, but {missing.association_id} "
+                        f"does not list {declarer.association_id}"
+                    )
+                    continue
+                result.warnings.append(
                     f"{left.association_id}: overlaps {right.association_id}; "
                     "maintainer review needed"
                 )
-    return warnings
+
+    processed_declared_pairs: set[frozenset[str]] = set()
+    for left_id, overlap_ids in known_overlaps.items():
+        for right_id in overlap_ids:
+            if right_id not in by_id:
+                continue
+            pair = frozenset({left_id, right_id})
+            if pair in processed_declared_pairs or pair in geometric_overlaps:
+                continue
+            processed_declared_pairs.add(pair)
+            if scope_ids is not None and not pair.intersection(scope_ids):
+                continue
+            if left_id not in known_overlaps.get(right_id, set()):
+                result.errors.append(
+                    f"{left_id}: known_overlaps lists {right_id}, but {right_id} "
+                    f"does not list {left_id}"
+                )
+                continue
+            if pair not in geometric_overlaps:
+                result.errors.append(
+                    f"{left_id}: known_overlaps lists {right_id}, "
+                    "but the boundaries do not overlap"
+                )
+    return result
+
+
+def _known_overlaps(
+    associations: list[Association],
+    result: CheckResult,
+) -> dict[str, set[str]]:
+    association_ids = {association.association_id for association in associations}
+    known_overlaps = {association.association_id: set() for association in associations}
+    for association in associations:
+        if "known_overlaps" not in association.metadata:
+            continue
+        value = association.metadata["known_overlaps"]
+        if not isinstance(value, list):
+            result.errors.append(
+                f"{association.association_id}: known_overlaps must be a list of association ids"
+            )
+            continue
+        for item in value:
+            if not isinstance(item, str) or not ASSOCIATION_ID_RE.match(item):
+                result.errors.append(
+                    f"{association.association_id}: known_overlaps must be a list of "
+                    "association ids"
+                )
+                continue
+            if item == association.association_id:
+                result.errors.append(
+                    f"{association.association_id}: known_overlaps cannot include itself"
+                )
+                continue
+            if item not in association_ids:
+                result.errors.append(
+                    f"{association.association_id}: known_overlaps references unknown "
+                    f"association '{item}'"
+                )
+                continue
+            known_overlaps[association.association_id].add(item)
+    return known_overlaps
 
 
 def _boundary_confidence_warnings(association: Association) -> list[str]:

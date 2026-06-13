@@ -68,6 +68,9 @@ the association:
 Use `association_contact` for the association person engaged on boundary review
 or clarification. Leave it blank if nobody at the association has engaged.
 
+Use `known_overlaps` only when two associations intentionally share territory.
+Both association files must list each other by association id.
+
 Approximate boundaries are acceptable when the source is descriptive.
 
 If two sources conflict, include both and explain the conflict.
