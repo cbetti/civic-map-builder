@@ -156,39 +156,23 @@ def stage_release_assets(
     release_dir.mkdir(parents=True, exist_ok=True)
     project_slug = _public_project_slug(config.project_id)
     staged_maps = []
-    staged_attributions = []
     for map_path in map_paths:
         staged_map = (
             release_dir / f"{_release_asset_stem(project_slug, map_path)}-{release_name}.png"
         )
         shutil.copyfile(map_path, staged_map)
         staged_maps.append(staged_map)
-        staged_attribution = _stage_attribution(map_path, staged_map)
-        if staged_attribution is not None:
-            staged_attributions.append(staged_attribution)
-    readme_path = release_dir / "README.txt"
+    attribution_path = _write_release_attribution(staged_maps, map_paths)
+    _remove_stale_release_text_files(release_dir, keep=attribution_path)
+    stale_readme = release_dir / "README.txt"
     stale_markdown_readme = release_dir / "README.md"
+    if stale_readme.exists():
+        stale_readme.unlink()
     if stale_markdown_readme.exists():
         stale_markdown_readme.unlink()
-    readme_path.write_text(
-        "\n".join(
-            [
-                f"civic-map-builder {release_name}",
-                "",
-                *[f"- Map: {staged_map.name}" for staged_map in staged_maps],
-                *[
-                    f"- Attribution: {staged_attribution.name}"
-                    for staged_attribution in staged_attributions
-                ],
-                f"- Generated at: {datetime.now(timezone.utc).isoformat()}",
-                "",
-            ]
-        ),
-        encoding="utf8",
-    )
     _write_release_zip(
         release_dir / f"{project_slug}-{release_name}.zip",
-        [readme_path, *staged_maps, *staged_attributions],
+        [*staged_maps, attribution_path],
     )
     return release_dir
 
@@ -259,15 +243,42 @@ def _write_attribution(output_path: Path, *, base_features: BaseMapFeatures | No
     attribution_path.write_text(BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
 
 
-def _stage_attribution(source_map: Path, staged_map: Path) -> Path | None:
-    source_attribution = source_map.with_suffix(".txt")
-    staged_attribution = staged_map.with_suffix(".txt")
-    if not source_attribution.exists():
-        if staged_attribution.exists():
-            staged_attribution.unlink()
-        return None
-    shutil.copyfile(source_attribution, staged_attribution)
-    return staged_attribution
+def _write_release_attribution(staged_maps: list[Path], source_maps: list[Path]) -> Path:
+    attribution_path = staged_maps[0].with_suffix(".txt")
+    attribution_text = _release_attribution_text(source_maps)
+    lines = []
+    if attribution_text:
+        lines.extend([attribution_text, ""])
+    lines.extend(
+        [
+            *[f"- Map: {staged_map.name}" for staged_map in staged_maps],
+            f"- Attribution: {attribution_path.name}",
+            f"- Generated at: {datetime.now(timezone.utc).isoformat()}",
+            "",
+        ]
+    )
+    attribution_path.write_text(
+        "\n".join(lines),
+        encoding="utf8",
+    )
+    return attribution_path
+
+
+def _remove_stale_release_text_files(release_dir: Path, *, keep: Path) -> None:
+    for text_path in release_dir.glob("*.txt"):
+        if text_path != keep:
+            text_path.unlink()
+
+
+def _release_attribution_text(source_maps: list[Path]) -> str:
+    attribution_lines = []
+    for source_map in source_maps:
+        source_attribution = source_map.with_suffix(".txt")
+        if source_attribution.exists():
+            attribution = source_attribution.read_text(encoding="utf8").strip()
+            if attribution and attribution not in attribution_lines:
+                attribution_lines.append(attribution)
+    return "\n".join(attribution_lines)
 
 
 def _public_project_slug(project_id: str) -> str:

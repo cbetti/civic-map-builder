@@ -187,9 +187,16 @@ def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch)
     release_dir = render.stage_release_assets("2026-05.1", config_path=config_path)
 
     staged_attribution = release_dir / "test-project-2026-05.1.txt"
-    assert staged_attribution.read_text(encoding="utf8") == render.BASEMAP_ATTRIBUTION + "\n"
-    readme_text = (release_dir / "README.txt").read_text(encoding="utf8")
-    assert f"- Attribution: {staged_attribution.name}" in readme_text
+    attribution_lines = staged_attribution.read_text(encoding="utf8").splitlines()
+    assert attribution_lines[:4] == [
+        render.BASEMAP_ATTRIBUTION,
+        "",
+        "- Map: test-project-2026-05.1.png",
+        "- Attribution: test-project-2026-05.1.txt",
+    ]
+    assert attribution_lines[4].startswith("- Generated at: ")
+    assert len(attribution_lines) == 5
+    assert not (release_dir / "README.txt").exists()
 
 
 def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
@@ -211,12 +218,11 @@ def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
 
     assert (release_dir / "montgomery-county-area-associations-2026-05.1.png").is_file()
     assert (release_dir / "montgomery-county-area-associations-2026-05.1.txt").is_file()
-    assert (release_dir / "README.txt").is_file()
+    assert not (release_dir / "README.txt").exists()
     assert not (release_dir / "README.md").exists()
     zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
     with zipfile.ZipFile(zip_path) as release_zip:
         assert sorted(release_zip.namelist()) == [
-            "README.txt",
             "montgomery-county-area-associations-2026-05.1.png",
             "montgomery-county-area-associations-2026-05.1.txt",
         ]
@@ -247,11 +253,22 @@ def test_release_assets_prefixes_named_views_with_public_project_slug(
     assert (
         release_dir / "montgomery-county-area-associations-north-hills-2026-05.1.png"
     ).is_file()
+    attribution_text = (
+        release_dir / "montgomery-county-area-associations-2026-05.1.txt"
+    ).read_text(encoding="utf8")
+    assert "- Map: montgomery-county-area-associations-2026-05.1.png" in attribution_text
+    assert (
+        "- Map: montgomery-county-area-associations-north-hills-2026-05.1.png"
+        in attribution_text
+    )
+    assert not (
+        release_dir / "montgomery-county-area-associations-north-hills-2026-05.1.txt"
+    ).exists()
     zip_path = release_dir / "montgomery-county-area-associations-2026-05.1.zip"
     with zipfile.ZipFile(zip_path) as release_zip:
         assert sorted(release_zip.namelist()) == [
-            "README.txt",
             "montgomery-county-area-associations-2026-05.1.png",
+            "montgomery-county-area-associations-2026-05.1.txt",
             "montgomery-county-area-associations-north-hills-2026-05.1.png",
         ]
 
