@@ -25,6 +25,7 @@
 ## Testing Guidelines
 - Use `pytest`; mirror module names in test files (e.g., `civic_map_builder/associations.py` → `tests/test_associations.py`).
 - Cover new CLI options with argument parsing tests and one happy-path integration where feasible.
+- Do not add permanent tests just to prove transitional cleanup or removed legacy behavior; verify that in-agent instead.
 - Add minimal fixtures under `tests/`; update `associations/sample__blair_highschool/` only when intentionally changing documented sample data.
 
 ## Commit & Pull Request Guidelines

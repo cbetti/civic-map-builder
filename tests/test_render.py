@@ -30,7 +30,6 @@ def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
     expected_bounds = (-77.03, 39.0, -77.016, 39.004)
     with Image.open(regional_path) as image:
         assert image.size == _expected_regional_dimensions(_padded_bounds(expected_bounds, 0.05))
-        assert image.size != (3600, 3000)
 
 
 def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
@@ -268,10 +267,9 @@ def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch)
     ]
     assert attribution_lines[4].startswith("- Generated at: ")
     assert len(attribution_lines) == 5
-    assert not (release_dir / "README.txt").exists()
 
 
-def test_release_assets_uses_public_project_slug_without_zip(
+def test_release_assets_uses_public_project_slug(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -290,8 +288,6 @@ def test_release_assets_uses_public_project_slug_without_zip(
 
     assert (release_dir / "montgomery-county-area-associations-2026-05.1.png").is_file()
     assert (release_dir / "montgomery-county-area-associations-2026-05.1.txt").is_file()
-    assert not (release_dir / "README.txt").exists()
-    assert not (release_dir / "README.md").exists()
 
 
 def test_release_assets_prefixes_named_views_with_public_project_slug(
