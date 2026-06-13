@@ -175,8 +175,6 @@ def stage_release_assets(
             [
                 f"civic-map-builder {release_name}",
                 "",
-                "Generated release assets for manual upload to a GitHub Release.",
-                "",
                 *[f"- Map: {staged_map.name}" for staged_map in staged_maps],
                 *[
                     f"- Attribution: {staged_attribution.name}"

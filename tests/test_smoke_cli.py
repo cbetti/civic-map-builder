@@ -56,6 +56,10 @@ def test_new_command_creates_starter_files() -> None:
         assert "Created" in result.stdout
         assert Path("associations/example_association/boundary.md").is_file()
         assert Path("associations/example_association/boundary.geojson").is_file()
+        assert (
+            "boundary_confidence: draft"
+            in Path("associations/example_association/boundary.md").read_text(encoding="utf8")
+        )
 
 
 def test_check_preview_and_render_smoke() -> None:
@@ -359,6 +363,7 @@ def _write_association(
             [
                 "---",
                 f"name: {name}",
+                "boundary_confidence: provisional",
                 "---",
                 "",
                 "A concise boundary description.",

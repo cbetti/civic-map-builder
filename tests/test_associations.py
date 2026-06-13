@@ -97,6 +97,46 @@ def test_check_warns_on_overlap_without_failing(tmp_path: Path) -> None:
     assert any("overlaps" in warning for warning in result.warnings)
 
 
+def test_check_accepts_boundary_confidence_values(tmp_path: Path) -> None:
+    config_path = _write_project_config(tmp_path)
+    for value in ("draft", "provisional", "confirmed"):
+        directory = tmp_path / f"associations/{value}"
+        directory.mkdir(parents=True)
+        _write_markdown(directory, boundary_confidence=value)
+        _write_geojson(directory, lon=-77.0 + len(value) / 100)
+
+    result = check_associations(config_path=config_path)
+
+    assert result.ok
+    assert not any("boundary_confidence" in warning for warning in result.warnings)
+
+
+def test_check_warns_on_missing_boundary_confidence(tmp_path: Path) -> None:
+    config_path = _write_project_config(tmp_path)
+    directory = tmp_path / "associations/alpha"
+    directory.mkdir(parents=True)
+    _write_markdown(directory, boundary_confidence=None)
+    _write_geojson(directory)
+
+    result = check_associations(config_path=config_path)
+
+    assert result.ok
+    assert any("boundary_confidence is missing" in warning for warning in result.warnings)
+
+
+def test_check_warns_on_invalid_boundary_confidence(tmp_path: Path) -> None:
+    config_path = _write_project_config(tmp_path)
+    directory = tmp_path / "associations/alpha"
+    directory.mkdir(parents=True)
+    _write_markdown(directory, boundary_confidence="unverified")
+    _write_geojson(directory)
+
+    result = check_associations(config_path=config_path)
+
+    assert result.ok
+    assert any("boundary_confidence must be one of" in warning for warning in result.warnings)
+
+
 def _write_project_config(root: Path) -> Path:
     config_path = root / "config/project.yml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -117,13 +157,18 @@ def _write_project_config(root: Path) -> Path:
     return config_path
 
 
-def _write_markdown(directory: Path) -> None:
+def _write_markdown(directory: Path, *, boundary_confidence: str | None = "provisional") -> None:
+    metadata = [
+        "---",
+        f"name: {directory.name.title()}",
+    ]
+    if boundary_confidence is not None:
+        metadata.append(f"boundary_confidence: {boundary_confidence}")
+    metadata.append("---")
     (directory / "boundary.md").write_text(
         "\n".join(
             [
-                "---",
-                f"name: {directory.name.title()}",
-                "---",
+                *metadata,
                 "",
                 "Boundary text.",
                 "",

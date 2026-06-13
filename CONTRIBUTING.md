@@ -55,6 +55,16 @@ Use public or verifiable sources when possible, such as bylaws, official
 association pages, maps published by the association, local government records,
 or other public documents.
 
+Use `boundary_confidence` in `boundary.md` to describe the mapped boundary, not
+the association:
+
+- `draft` for placeholders, incomplete boundaries, or major unresolved
+  uncertainty.
+- `provisional` for usable source-informed boundaries that still require
+  interpretation or have meaningful uncertainty.
+- `confirmed` for clear current source information with no known material
+  ambiguity.
+
 Approximate boundaries are acceptable when the source is descriptive.
 
 If two sources conflict, include both and explain the conflict.

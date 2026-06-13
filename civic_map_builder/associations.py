@@ -16,6 +16,7 @@ ASSOCIATION_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 BOUNDARY_MD = "boundary.md"
 BOUNDARY_GEOJSON = "boundary.geojson"
 SAMPLE_ASSOCIATION_PREFIX = "sample__"
+BOUNDARY_CONFIDENCE_VALUES = frozenset({"draft", "provisional", "confirmed"})
 
 
 @dataclass(frozen=True)
@@ -156,6 +157,7 @@ def _check_association_dir(directory: Path) -> tuple[CheckResult, Association | 
         result.warnings.append(f"{association_id}: boundary area is very small")
     if association.geometry.area > 1:
         result.warnings.append(f"{association_id}: boundary area is very large")
+    result.warnings.extend(_boundary_confidence_warnings(association))
     return result, association
 
 
@@ -291,6 +293,21 @@ def _overlap_warnings(associations: list[Association]) -> list[str]:
     return warnings
 
 
+def _boundary_confidence_warnings(association: Association) -> list[str]:
+    value = association.metadata.get("boundary_confidence")
+    if value is None:
+        return [
+            f"{association.association_id}: boundary_confidence is missing; "
+            "expected draft, provisional, or confirmed"
+        ]
+    if not isinstance(value, str) or value not in BOUNDARY_CONFIDENCE_VALUES:
+        return [
+            f"{association.association_id}: boundary_confidence must be one of "
+            "draft, provisional, or confirmed"
+        ]
+    return []
+
+
 def _validate_association_id(association_id: str) -> None:
     if not ASSOCIATION_ID_RE.match(association_id):
         raise CivicMapBuilderError(
@@ -301,6 +318,7 @@ def _validate_association_id(association_id: str) -> None:
 def _starter_markdown(association_id: str) -> str:
     return """---
 name: TODO Association Name
+boundary_confidence: draft
 bylaws_source_url:
 last_updated: YYYY-MM-DD
 last_updated_by: TODO Name

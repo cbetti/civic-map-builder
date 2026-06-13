@@ -45,8 +45,8 @@ This project is for civic, neighborhood, community, and similar local
 associations in and near Montgomery County, Maryland.
 
 The dataset is most useful when each boundary includes the association's public
-name, a public or verifiable source, boundary geometry, and notes about
-uncertainty or overlap.
+name, a public or verifiable source, boundary geometry, a boundary confidence
+value, and notes about uncertainty or overlap.
 
 ## Reusing the data
 

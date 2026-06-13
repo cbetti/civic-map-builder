@@ -42,6 +42,15 @@ Each association has one folder under `associations/`.
 
 `boundary.md` stores the association name, source link, and boundary notes.
 
+Use `boundary_confidence` in the front matter to summarize confidence in the
+mapped boundary:
+
+- `draft`: working placeholder, incomplete, or major unresolved uncertainty.
+- `provisional`: usable and source-informed, but still has meaningful
+  uncertainty or interpretation.
+- `confirmed`: clear current source information with no known material
+  ambiguity in the mapped boundary.
+
 `boundary.geojson` stores WGS84 longitude/latitude boundary coordinates.
 
 See `associations/sample__blair_highschool/` for a reference boundary with a

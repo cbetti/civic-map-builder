@@ -1,5 +1,6 @@
 ---
 name: Woodside Civic Association
+boundary_confidence: confirmed
 bylaws_source_url:
 last_updated: 2026-05-27
 last_updated_by: Chris Betti

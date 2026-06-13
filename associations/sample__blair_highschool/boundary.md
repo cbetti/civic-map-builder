@@ -1,5 +1,6 @@
 ---
 name: Sample - Blair High School
+boundary_confidence: draft
 bylaws_source_url:
 last_updated: 2026-05-21
 last_updated_by: Chris Betti

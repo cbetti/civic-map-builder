@@ -1,5 +1,6 @@
 ---
 name: Seven Oaks Evanswood Citizens Association
+boundary_confidence: confirmed
 bylaws_source_url: https://www.soeca.org/about-us/
 last_updated: 2026-05-28
 last_updated_by: Chris Betti
