@@ -84,7 +84,7 @@ def check(
 def preview(
     association_id: str = typer.Argument(..., help="Association identifier."),
     include_frame: bool = typer.Option(
-        True,
+        False,
         "--frame/--no-frame",
         help="Include the preview's outer pixel frame.",
     ),
@@ -207,7 +207,7 @@ def basemap_extract() -> None:
     try:
         config = load_project_config()
         input_path = extraction_source_path(config)
-        bounds = extraction_bbox(load_associations(), config.base_map.padding_ratio)
+        bounds = extraction_bbox(load_associations(), config.base_map.data_padding_ratio)
         output_path = project_extract_path(config.project_id)
         typer.echo(f"BBox: {format_bbox(bounds)}")
         typer.echo(f"Input: {input_path}")
@@ -242,6 +242,7 @@ def _show_basemap_status() -> None:
     typer.echo(f"osm_source: {config.base_map.osm_source or ''}")
     typer.echo(f"render_basemap: {config.base_map.render_basemap or ''}")
     typer.echo(f"padding_ratio: {config.base_map.padding_ratio}")
+    typer.echo(f"data_padding_ratio: {config.base_map.data_padding_ratio}")
     typer.echo(f"local_config: {local_path if local_path.is_file() else ''}")
     if config.base_map.views:
         typer.echo("views:")

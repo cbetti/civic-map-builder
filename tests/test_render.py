@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 import zipfile
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from shapely.geometry import LineString, Polygon
 
@@ -23,9 +25,13 @@ def test_render_outputs_nontrivial_pngs(tmp_path: Path) -> None:
     assert preview_path.is_file()
     assert regional_path.is_file()
     assert preview_path.stat().st_size > 1_000
-    assert regional_path.stat().st_size > preview_path.stat().st_size
     assert not preview_path.with_suffix(".txt").exists()
     assert not regional_path.with_suffix(".txt").exists()
+
+    expected_bounds = (-77.03, 39.0, -77.016, 39.004)
+    with Image.open(regional_path) as image:
+        assert image.size == _expected_regional_dimensions(_padded_bounds(expected_bounds, 0.05))
+        assert image.size != (3600, 3000)
 
 
 def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
@@ -47,7 +53,12 @@ def test_render_writes_named_view_pngs(tmp_path: Path) -> None:
         "regional-boundaries.png",
         "closeup.png",
     ]
-    assert (tmp_path / "outputs/maps/closeup.png").is_file()
+    closeup_path = tmp_path / "outputs/maps/closeup.png"
+    assert closeup_path.is_file()
+    with Image.open(closeup_path) as image:
+        assert image.size == _expected_regional_dimensions(
+            _padded_bounds((-77.04, 38.99, -77.00, 39.02), 0.05)
+        )
 
 
 def test_preview_output_scale_changes_final_image_dimensions(tmp_path: Path) -> None:
@@ -57,10 +68,16 @@ def test_preview_output_scale_changes_final_image_dimensions(tmp_path: Path) -> 
     preview_path = render.render_preview("alpha", config_path=config_path, output_scale=3)
 
     with Image.open(preview_path) as image:
-        assert image.size == (3600, 2700)
+        assert image.size == _expected_preview_dimensions(
+            _padded_bounds((-77.03, 39.0, -77.026, 39.004), 0.05),
+            height=2700,
+        )
 
 
-def test_preview_can_render_without_outer_pixel_frame(tmp_path: Path, monkeypatch) -> None:
+def test_preview_renders_without_outer_pixel_frame_by_default(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     config_path = _write_project_config(tmp_path)
     _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
     rendered_styles: list[render.RenderStyle] = []
@@ -71,21 +88,44 @@ def test_preview_can_render_without_outer_pixel_frame(tmp_path: Path, monkeypatc
 
     monkeypatch.setattr(render, "_render_png", fake_render_png)
 
-    render.render_preview("alpha", config_path=config_path, include_frame=False, output_scale=2)
+    render.render_preview("alpha", config_path=config_path, output_scale=2)
 
     assert rendered_styles[0].padding == 0
-    assert rendered_styles[0].width == 2400
+    assert rendered_styles[0].width == _expected_preview_dimensions(
+        _padded_bounds((-77.03, 39.0, -77.026, 39.004), 0.05),
+        height=1800,
+    )[0]
     assert rendered_styles[0].height == 1800
 
 
-def test_preview_expands_loaded_bounds_to_fill_canvas_aspect(tmp_path: Path, monkeypatch) -> None:
+def test_preview_can_render_with_outer_pixel_frame(tmp_path: Path, monkeypatch) -> None:
+    config_path = _write_project_config(tmp_path)
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    rendered_styles: list[render.RenderStyle] = []
+
+    def fake_render_png(**kwargs) -> None:
+        rendered_styles.append(kwargs["style"])
+        kwargs["output_path"].write_bytes(b"png")
+
+    monkeypatch.setattr(render, "_render_png", fake_render_png)
+
+    render.render_preview("alpha", config_path=config_path, include_frame=True)
+
+    assert rendered_styles[0].padding == render.PREVIEW_STYLE.padding
+
+
+def test_preview_uses_context_bounds_for_basemap_and_image(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
     config_path = _write_project_config(
         tmp_path,
         extra_lines=[
             "base_map:",
             "  enabled: true",
             f"  render_basemap: {tmp_path / 'basemap.osm.pbf'}",
-            "  padding_ratio: 0",
+            "  padding_ratio: 0.05",
+            "  data_padding_ratio: 0.15",
         ],
     )
     (tmp_path / "basemap.osm.pbf").write_bytes(b"pbf")
@@ -100,11 +140,44 @@ def test_preview_expands_loaded_bounds_to_fill_canvas_aspect(tmp_path: Path, mon
 
     render.render_preview("alpha", config_path=config_path, include_frame=False)
 
-    minx, miny, maxx, maxy = loaded_bounds[0]
-    assert minx < -77.03
-    assert maxx > -77.026
-    assert miny == 39.0
-    assert maxy == 39.004
+    assert loaded_bounds[0] == pytest.approx(
+        (-77.0306, 38.9994, -77.0254, 39.0046)
+    )
+
+
+def test_regional_render_uses_context_bounds_for_basemap_and_image(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  enabled: true",
+            f"  render_basemap: {tmp_path / 'basemap.osm.pbf'}",
+            "  padding_ratio: 0.05",
+            "  data_padding_ratio: 0.15",
+        ],
+    )
+    (tmp_path / "basemap.osm.pbf").write_bytes(b"pbf")
+    _write_association(tmp_path, "alpha", "Alpha Association", -77.03, 39.0)
+    loaded_bounds: list[tuple[float, float, float, float]] = []
+
+    def fake_load_basemap_features(**kwargs):
+        loaded_bounds.append(kwargs["bounds"])
+        return None
+
+    monkeypatch.setattr(render, "load_basemap_features", fake_load_basemap_features)
+
+    regional_path = render.render_regional_map(config_path=config_path)[0]
+
+    assert loaded_bounds[0] == pytest.approx(
+        (-77.0306, 38.9994, -77.0254, 39.0046)
+    )
+    with Image.open(regional_path) as image:
+        assert image.size == _expected_regional_dimensions(
+            _padded_bounds((-77.03, 39.0, -77.026, 39.004), 0.05)
+        )
 
 
 def test_preview_output_scale_must_be_in_supported_range(tmp_path: Path) -> None:
@@ -132,7 +205,7 @@ def test_render_regional_map_includes_sample_associations_by_default(
         rendered_ids.append(
             [association.association_id for association in kwargs["associations"]]
         )
-        kwargs["output_path"].write_bytes(b"png")
+        _write_blank_png(kwargs["output_path"])
 
     monkeypatch.setattr(render, "_render_png", fake_render_png)
 
@@ -158,7 +231,7 @@ def test_release_assets_excludes_sample_associations_by_default(
         rendered_ids.append(
             [association.association_id for association in kwargs["associations"]]
         )
-        kwargs["output_path"].write_bytes(b"png")
+        _write_blank_png(kwargs["output_path"])
 
     monkeypatch.setattr(render, "_render_png", fake_render_png)
 
@@ -176,7 +249,7 @@ def test_release_assets_stages_attribution_sidecars(tmp_path: Path, monkeypatch)
     map_path = tmp_path / "outputs/maps/regional-boundaries.png"
     attribution_path = map_path.with_suffix(".txt")
     map_path.parent.mkdir(parents=True)
-    map_path.write_bytes(b"png")
+    _write_blank_png(map_path)
     attribution_path.write_text(render.BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
     monkeypatch.setattr(
         render,
@@ -210,7 +283,7 @@ def test_release_assets_uses_public_project_slug_and_writes_flat_zip(
     map_path = tmp_path / "outputs/maps/regional-boundaries.png"
     attribution_path = map_path.with_suffix(".txt")
     map_path.parent.mkdir(parents=True)
-    map_path.write_bytes(b"png")
+    _write_blank_png(map_path)
     attribution_path.write_text(render.BASEMAP_ATTRIBUTION + "\n", encoding="utf8")
     monkeypatch.setattr(render, "render_regional_map", lambda **_kwargs: [map_path])
 
@@ -239,8 +312,8 @@ def test_release_assets_prefixes_named_views_with_public_project_slug(
     default_map = tmp_path / "outputs/maps/regional-boundaries.png"
     view_map = tmp_path / "outputs/maps/north-hills.png"
     default_map.parent.mkdir(parents=True)
-    default_map.write_bytes(b"default")
-    view_map.write_bytes(b"view")
+    _write_blank_png(default_map)
+    _write_blank_png(view_map)
     monkeypatch.setattr(
         render,
         "render_regional_map",
@@ -271,6 +344,16 @@ def test_release_assets_prefixes_named_views_with_public_project_slug(
             "montgomery-county-area-associations-2026-05.1.txt",
             "montgomery-county-area-associations-north-hills-2026-05.1.png",
         ]
+
+
+def test_release_footer_text_uses_repository_project_and_release() -> None:
+    assert render._release_footer_text(
+        "montgomery-county-area-associations",
+        "2026-06.1",
+    ) == (
+        "github.com/cbetti/civic-map-builder | "
+        "montgomery-county-area-associations | 2026-06.1"
+    )
 
 
 def test_render_can_draw_synthetic_basemap_features(tmp_path: Path, monkeypatch) -> None:
@@ -338,6 +421,44 @@ def _write_project_config(
         encoding="utf8",
     )
     return config_path
+
+
+def _write_blank_png(path: Path, *, size: tuple[int, int] = (900, 700)) -> None:
+    Image.new("RGB", size, (255, 255, 255)).save(path, format="PNG")
+
+
+def _expected_regional_dimensions(
+    bounds: tuple[float, float, float, float],
+) -> tuple[int, int]:
+    minx, miny, maxx, maxy = bounds
+    center_lat = (miny + maxy) / 2
+    projected_width = (maxx - minx) * math.cos(math.radians(center_lat))
+    projected_height = maxy - miny
+    return (
+        round(projected_width * render.REGIONAL_PIXELS_PER_DEGREE),
+        round(projected_height * render.REGIONAL_PIXELS_PER_DEGREE),
+    )
+
+
+def _padded_bounds(
+    bounds: tuple[float, float, float, float],
+    padding_ratio: float,
+) -> tuple[float, float, float, float]:
+    minx, miny, maxx, maxy = bounds
+    x_padding = (maxx - minx) * padding_ratio
+    y_padding = (maxy - miny) * padding_ratio
+    return minx - x_padding, miny - y_padding, maxx + x_padding, maxy + y_padding
+
+
+def _expected_preview_dimensions(
+    bounds: tuple[float, float, float, float],
+    *,
+    height: int,
+) -> tuple[int, int]:
+    minx, miny, maxx, maxy = bounds
+    center_lat = (miny + maxy) / 2
+    aspect = ((maxx - minx) * math.cos(math.radians(center_lat))) / (maxy - miny)
+    return round(height * aspect), height
 
 
 def _write_association(root: Path, association_id: str, name: str, lon: float, lat: float) -> None:

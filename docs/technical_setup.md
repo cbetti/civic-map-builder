@@ -87,6 +87,10 @@ Machine-local `render_basemap` state lives in ignored `config/local.yml`.
 
 Downloaded OSM data and generated PNGs are not committed.
 
+`base_map.padding_ratio` controls visible map context around rendered
+boundaries. `base_map.data_padding_ratio` controls the larger OSM data query
+context used to avoid clipped large base-map features.
+
 ## Known limitation
 
 Cross-border base-map extracts work best when `basemap extract` can cut a

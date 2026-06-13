@@ -75,7 +75,7 @@ def test_check_preview_and_render_smoke() -> None:
         check_result = runner.invoke(app, ["check"])
         preview_result = runner.invoke(
             app,
-            ["preview", "alpha", "--no-frame", "--output-scale", "2"],
+            ["preview", "alpha", "--output-scale", "2"],
         )
         render_result = runner.invoke(app, ["render"])
         release_result = runner.invoke(

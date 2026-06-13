@@ -185,7 +185,7 @@ def extract_basemap(
         )
 
     associations = load_associations(config_path=config_path)
-    bounds = extraction_bbox(associations, config.base_map.padding_ratio)
+    bounds = extraction_bbox(associations, config.base_map.data_padding_ratio)
     output_path = project_extract_path(config.project_id, cache_root=cache_root)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     command = build_extract_command(
@@ -496,7 +496,8 @@ def update_base_map_config(
         base_map["render_basemap"] = str(render_basemap.expanduser().resolve())
 
     if not write_local_config:
-        base_map.setdefault("padding_ratio", 0.15)
+        base_map.setdefault("padding_ratio", 0.05)
+        base_map.setdefault("data_padding_ratio", 0.15)
         base_map.setdefault("views", {})
     target_path.parent.mkdir(parents=True, exist_ok=True)
     target_path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf8")

@@ -29,6 +29,7 @@ def test_base_map_config_parses_named_views(tmp_path: Path) -> None:
             "  osm_source: maryland",
             "  render_basemap: cache/maryland-latest.osm.pbf",
             "  padding_ratio: 0.2",
+            "  data_padding_ratio: 0.3",
             "  views:",
             "    county:",
             "      bbox: [-77.2, 38.8, -76.8, 39.2]",
@@ -41,6 +42,7 @@ def test_base_map_config_parses_named_views(tmp_path: Path) -> None:
     assert config.base_map.osm_source == "maryland"
     assert config.base_map.render_basemap == (tmp_path / "cache/maryland-latest.osm.pbf").resolve()
     assert config.base_map.padding_ratio == 0.2
+    assert config.base_map.data_padding_ratio == 0.3
     assert config.base_map.views[0].name == "county"
     assert config.base_map.views[0].bbox == (-77.2, 38.8, -76.8, 39.2)
 
@@ -79,6 +81,7 @@ def test_project_config_load_applies_only_local_base_map_runtime_keys(
             "  enabled: false",
             "  osm_source: maryland",
             "  padding_ratio: 0.15",
+            "  data_padding_ratio: 0.2",
             "  views: {}",
         ],
     )
@@ -91,6 +94,7 @@ def test_project_config_load_applies_only_local_base_map_runtime_keys(
                 "  osm_source: district-of-columbia",
                 f"  render_basemap: {local_pbf}",
                 "  padding_ratio: 0.8",
+                "  data_padding_ratio: 0.9",
                 "  views:",
                 "    local:",
                 "      bbox: [-78, 38, -77, 39]",
@@ -108,6 +112,7 @@ def test_project_config_load_applies_only_local_base_map_runtime_keys(
     assert merged.base_map.osm_source == "district-of-columbia"
     assert merged.base_map.render_basemap == local_pbf
     assert merged.base_map.padding_ratio == 0.15
+    assert merged.base_map.data_padding_ratio == 0.2
     assert merged.base_map.views == ()
     assert explicit.base_map.enabled is False
     assert explicit.base_map.render_basemap is None
@@ -129,6 +134,17 @@ def test_project_config_allows_base_map_without_default_osm_source(tmp_path: Pat
     assert config.base_map.render_basemap is None
 
 
+def test_project_config_defaults_base_map_padding_ratio_to_five_percent(
+    tmp_path: Path,
+) -> None:
+    config_path = _write_project_config(tmp_path)
+
+    config = ProjectConfig.load(config_path)
+
+    assert config.base_map.padding_ratio == 0.05
+    assert config.base_map.data_padding_ratio == 0.15
+
+
 def test_project_config_rejects_old_base_map_key_names(tmp_path: Path) -> None:
     config_path = _write_project_config(
         tmp_path,
@@ -144,6 +160,21 @@ def test_project_config_rejects_old_base_map_key_names(tmp_path: Path) -> None:
 
     assert "base_map.download" in str(exc_info.value)
     assert "base_map.osm_source" in str(exc_info.value)
+
+
+def test_project_config_rejects_invalid_data_padding_ratio(tmp_path: Path) -> None:
+    config_path = _write_project_config(
+        tmp_path,
+        extra_lines=[
+            "base_map:",
+            "  data_padding_ratio: -0.1",
+        ],
+    )
+
+    with pytest.raises(CivicMapBuilderError) as exc_info:
+        ProjectConfig.load(config_path)
+
+    assert "base_map.data_padding_ratio" in str(exc_info.value)
 
 
 def test_local_config_rejects_old_base_map_key_names(monkeypatch, tmp_path: Path) -> None:
@@ -314,7 +345,8 @@ def test_extract_basemap_runs_expected_osmium_command(monkeypatch, tmp_path: Pat
         extra_lines=[
             "base_map:",
             f"  render_basemap: {tmp_path / 'maryland-latest.osm.pbf'}",
-            "  padding_ratio: 0.25",
+            "  padding_ratio: 0.05",
+            "  data_padding_ratio: 0.25",
         ],
     )
     input_path = tmp_path / "maryland-latest.osm.pbf"

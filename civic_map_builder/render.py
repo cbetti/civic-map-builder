@@ -20,6 +20,8 @@ BASEMAP_ATTRIBUTION = (
     "Map data: OpenStreetMap contributors (ODbL 1.0). "
     "Regional extracts from Geofabrik."
 )
+RELEASE_FOOTER_REPOSITORY = "github.com/cbetti/civic-map-builder"
+REGIONAL_PIXELS_PER_DEGREE = 65_000
 
 
 @dataclass(frozen=True)
@@ -84,7 +86,7 @@ def render_preview(
     association_id: str,
     *,
     config_path: Path | None = None,
-    include_frame: bool = True,
+    include_frame: bool = False,
     output_scale: int = 1,
 ) -> Path:
     if output_scale < 1 or output_scale > 4:
@@ -92,9 +94,18 @@ def render_preview(
 
     config = load_project_config(path=config_path)
     selected = load_association(association_id, config_path=config_path)
-    bounds = _padded_bounds(selected.geometry.bounds, config.base_map.padding_ratio)
+    shape_bounds = selected.geometry.bounds
+    bounds = _padded_bounds(shape_bounds, config.base_map.padding_ratio)
+    basemap_bounds = _padded_bounds(shape_bounds, config.base_map.data_padding_ratio)
+    if include_frame:
+        bounds = _padded_bounds(bounds, config.base_map.padding_ratio)
+        basemap_bounds = _padded_bounds(basemap_bounds, config.base_map.padding_ratio)
     style = _preview_style(include_frame=include_frame, output_scale=output_scale)
-    bounds = _fit_bounds_to_style_aspect(bounds, style)
+    if include_frame:
+        bounds = _fit_bounds_to_style_aspect(bounds, style)
+        basemap_bounds = _fit_bounds_to_style_aspect(basemap_bounds, style)
+    else:
+        style = _preview_bounds_style(bounds, style)
 
     output_path = config.outputs.previews / f"{association_id}.png"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -104,7 +115,7 @@ def render_preview(
         style=style,
         selected_id=selected.association_id,
         bounds=bounds,
-        base_features=_maybe_load_basemap(config.base_map, bounds),
+        base_features=_maybe_load_basemap(config.base_map, basemap_bounds),
     )
     return output_path
 
@@ -119,24 +130,23 @@ def render_regional_map(
     if not associations:
         raise CivicMapBuilderError("No associations found to render.")
 
-    default_bounds = _padded_bounds(
-        _combined_bounds([association.geometry for association in associations]),
-        config.base_map.padding_ratio,
-    )
+    default_bounds = _combined_bounds([association.geometry for association in associations])
     render_targets = [("regional-boundaries", default_bounds)]
     render_targets.extend((view.name, view.bbox) for view in config.base_map.views)
 
     output_paths = []
     for name, bounds in render_targets:
+        render_bounds = _padded_bounds(bounds, config.base_map.padding_ratio)
+        basemap_bounds = _padded_bounds(bounds, config.base_map.data_padding_ratio)
         output_path = config.outputs.maps / f"{name}.png"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         _render_png(
             output_path=output_path,
             associations=associations,
-            style=REGIONAL_STYLE,
+            style=_regional_style(render_bounds),
             selected_id=None,
-            bounds=bounds,
-            base_features=_maybe_load_basemap(config.base_map, bounds),
+            bounds=render_bounds,
+            base_features=_maybe_load_basemap(config.base_map, basemap_bounds),
         )
         output_paths.append(output_path)
     return output_paths
@@ -161,6 +171,7 @@ def stage_release_assets(
             release_dir / f"{_release_asset_stem(project_slug, map_path)}-{release_name}.png"
         )
         shutil.copyfile(map_path, staged_map)
+        _draw_release_footer(staged_map, _release_footer_text(project_slug, release_name))
         staged_maps.append(staged_map)
     attribution_path = _write_release_attribution(staged_maps, map_paths)
     _remove_stale_release_text_files(release_dir, keep=attribution_path)
@@ -281,6 +292,36 @@ def _release_attribution_text(source_maps: list[Path]) -> str:
     return "\n".join(attribution_lines)
 
 
+def _release_footer_text(project_slug: str, release_name: str) -> str:
+    return f"{RELEASE_FOOTER_REPOSITORY} | {project_slug} | {release_name}"
+
+
+def _draw_release_footer(path: Path, text: str) -> None:
+    with Image.open(path) as source:
+        image = source.convert("RGBA")
+    draw = ImageDraw.Draw(image)
+    font = _label_font(_release_footer_font_size(image.width))
+    margin = max(12, image.width // 150)
+    box = draw.textbbox((0, 0), text, font=font)
+    text_width = box[2] - box[0]
+    text_height = box[3] - box[1]
+    x = image.width - margin - text_width
+    y = image.height - margin - text_height
+    draw.text(
+        (x, y),
+        text,
+        fill=(55, 55, 55),
+        font=font,
+        stroke_width=max(1, image.width // 1800),
+        stroke_fill=(255, 255, 255),
+    )
+    image.convert("RGB").save(path, format="PNG")
+
+
+def _release_footer_font_size(width: int) -> int:
+    return max(10, min(24, width // 150))
+
+
 def _public_project_slug(project_id: str) -> str:
     return project_id.replace("_", "-")
 
@@ -314,6 +355,43 @@ def _preview_style(*, include_frame: bool, output_scale: int) -> RenderStyle:
         outline_halo_width=style.outline_halo_width * output_scale,
         label_size=style.label_size * output_scale,
     )
+
+
+def _regional_style(bounds: tuple[float, float, float, float]) -> RenderStyle:
+    width, height = _regional_dimensions(bounds)
+    return replace(REGIONAL_STYLE, width=width, height=height, padding=0)
+
+
+def _preview_bounds_style(
+    bounds: tuple[float, float, float, float],
+    style: RenderStyle,
+) -> RenderStyle:
+    width, height = _projected_dimensions_for_height(bounds, style.height)
+    return replace(style, width=width, height=height, padding=0)
+
+
+def _regional_dimensions(bounds: tuple[float, float, float, float]) -> tuple[int, int]:
+    minx, miny, maxx, maxy = bounds
+    if minx == maxx or miny == maxy:
+        raise CivicMapBuilderError("Cannot render geometry with zero-width bounds.")
+    center_lat = (miny + maxy) / 2
+    projected_width = (maxx - minx) * math.cos(math.radians(center_lat))
+    projected_height = maxy - miny
+    width = max(1, round(projected_width * REGIONAL_PIXELS_PER_DEGREE))
+    height = max(1, round(projected_height * REGIONAL_PIXELS_PER_DEGREE))
+    return width, height
+
+
+def _projected_dimensions_for_height(
+    bounds: tuple[float, float, float, float],
+    height: int,
+) -> tuple[int, int]:
+    minx, miny, maxx, maxy = bounds
+    if minx == maxx or miny == maxy:
+        raise CivicMapBuilderError("Cannot render geometry with zero-width bounds.")
+    center_lat = (miny + maxy) / 2
+    aspect = ((maxx - minx) * math.cos(math.radians(center_lat))) / (maxy - miny)
+    return max(1, round(height * aspect)), height
 
 
 def _scaled_style(style: RenderStyle, pixel_scale: int) -> RenderStyle:

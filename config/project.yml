@@ -6,5 +6,6 @@ outputs:
   maps: outputs/maps
   release: outputs/release
 base_map:
-  padding_ratio: 0.15
+  padding_ratio: 0.05
+  data_padding_ratio: 0.15
   views: {}

@@ -36,6 +36,7 @@ class BaseMapConfig:
     render_basemap: Path | None
     osm_source: str | None
     padding_ratio: float
+    data_padding_ratio: float
     views: tuple[BaseMapView, ...]
 
 
@@ -192,9 +193,15 @@ def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig
             f"'base_map.osm_source' must be a non-empty string in {config_path}"
         )
 
-    padding_ratio = value.get("padding_ratio", 0.15)
+    padding_ratio = value.get("padding_ratio", 0.05)
     if not isinstance(padding_ratio, (int, float)) or padding_ratio < 0:
         raise CivicMapBuilderError(f"'base_map.padding_ratio' must be a non-negative number in {config_path}")
+
+    data_padding_ratio = value.get("data_padding_ratio", 0.15)
+    if not isinstance(data_padding_ratio, (int, float)) or data_padding_ratio < 0:
+        raise CivicMapBuilderError(
+            f"'base_map.data_padding_ratio' must be a non-negative number in {config_path}"
+        )
 
     views_data = value.get("views", {})
     if views_data is None:
@@ -218,6 +225,7 @@ def _base_map_config(value: Any, root: Path, config_path: Path) -> BaseMapConfig
         render_basemap=render_basemap,
         osm_source=osm_source,
         padding_ratio=float(padding_ratio),
+        data_padding_ratio=float(data_padding_ratio),
         views=tuple(views),
     )
 
