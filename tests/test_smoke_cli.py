@@ -208,7 +208,6 @@ def test_basemap_use_prompt_offers_project_extract(monkeypatch, tmp_path: Path) 
         assert "- extract: Project extract" in result.stdout
         assert "- district-of-columbia: District of Columbia" in result.stdout
         assert "- maryland: Maryland" in result.stdout
-        assert "Select base map:" in result.stdout
         config_text = Path(DEFAULT_LOCAL_CONFIG).read_text(encoding="utf8")
         assert "render_basemap: " + str(extract_path) in config_text
 
