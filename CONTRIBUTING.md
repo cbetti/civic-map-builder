@@ -34,17 +34,20 @@ Technical contributors can add or update boundaries directly.
 
 1. Fork and clone the repo.
 2. Create a branch.
-3. Create and activate a Python virtual environment.
-4. Install dev dependencies with `pip install -e ".[dev]"`.
-5. Create a folder with `civic-map-builder new my_association`, or edit an
+3. Install [uv](https://docs.astral.sh/uv/getting-started/installation/).
+4. From the repository root, install dev dependencies with `uv sync --extra dev`.
+   For basemap work, use `uv sync --extra dev --extra basemap` instead, including
+   for future dependency refreshes, so both extras stay installed. See
+   [Technical setup](docs/technical_setup.md) for rendering and basemap setup.
+5. Create a folder with `uv run civic-map-builder new my_association`, or edit an
    existing folder under `associations/`.
 6. Fill in `boundary.md` with the association name, source link, and notes.
 7. Edit `boundary.geojson`.
 8. Run:
 
    ```bash
-   civic-map-builder check my_association
-   civic-map-builder preview my_association
+   uv run civic-map-builder check my_association
+   uv run civic-map-builder preview my_association
    ```
 
 9. Open a pull request with the source link and any uncertainty noted.
@@ -95,6 +98,6 @@ For technical contributors:
 For changes to the CLI or rendering code:
 
 ```bash
-ruff check civic_map_builder tests
-pytest
+uv run ruff check civic_map_builder tests
+uv run pytest
 ```

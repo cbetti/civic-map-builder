@@ -2,6 +2,9 @@
 
 Use this guide for local development, validation, rendering, and basemap work.
 
+Use [uv](https://docs.astral.sh/uv/getting-started/installation/) to manage
+Python dependencies and run project commands. Install uv before continuing.
+
 ## Quick start
 
 Run commands from the repository root so `config/project.yml` resolves
@@ -10,30 +13,37 @@ correctly.
 ```bash
 git clone <repo-url>
 cd civic-map-builder
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-civic-map-builder check
-civic-map-builder render
+uv sync --extra dev
+uv run civic-map-builder check
+uv run civic-map-builder render
 ```
 
-On Windows PowerShell, create and activate the virtual environment with:
+`uv sync` creates `.venv` and installs the project in editable mode along with
+its dependencies. `uv run` uses that environment without requiring activation.
+The same commands work in Windows PowerShell.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
+This project defines `dev` and `basemap` as optional dependency extras. Select
+extras during setup or dependency refresh with `uv sync`, then use plain
+`uv run` for daily commands. By default, `uv run` retains the installed extras;
+you do not need to repeat `--extra` on each command.
+
+For dependency refreshes, use `uv sync --extra dev` for boundary-only work or
+`uv sync --extra dev --extra basemap` for basemap work. Always include all the
+extras you want in the same sync command: separate syncs for `dev` and
+`basemap` can remove the previously installed extra. Plain `uv sync` also
+removes optional dependencies that are not otherwise needed. `uv run --exact`
+can remove extras too, so use the plain `uv run` commands below.
 
 ## Common commands
 
 ```bash
-civic-map-builder new my_association
-civic-map-builder check my_association
-civic-map-builder preview my_association
-civic-map-builder render
-civic-map-builder release-assets --release-name YYYY-MM.N
-pytest
-ruff check civic_map_builder tests
+uv run civic-map-builder new my_association
+uv run civic-map-builder check my_association
+uv run civic-map-builder preview my_association
+uv run civic-map-builder render
+uv run civic-map-builder release-assets --release-name YYYY-MM.N
+uv run pytest
+uv run ruff check civic_map_builder tests
 ```
 
 ## Boundary files
@@ -65,14 +75,20 @@ GeoJSON polygon and an interior exclusion.
 
 Boundary-only rendering works without OpenStreetMap data.
 
-To render with OSM context:
+To render with OSM context, sync both extras together so the development tools
+remain installed. Use this same sync command for future dependency refreshes:
 
 ```bash
-pip install -e ".[dev,basemap]"
-civic-map-builder basemap download maryland
-civic-map-builder basemap extract
-civic-map-builder render
+uv sync --extra dev --extra basemap
+uv run civic-map-builder basemap download maryland
+uv run civic-map-builder basemap extract
+uv run civic-map-builder render
 ```
+
+Extraction also requires the external `osmium` CLI; uv installs the Python
+bindings but does not install this system tool. Install `osmium-tool` with
+`sudo apt install osmium-tool` on Debian/Ubuntu or `brew install osmium-tool`
+on macOS. On Windows, use WSL or install osmium-tool manually.
 
 Rendering from a full OSM download is very slow.
 

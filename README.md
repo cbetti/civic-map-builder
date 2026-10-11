@@ -68,6 +68,9 @@ License.
 This repository also contains a Python command-line tool for validating
 association boundary files and rendering map assets.
 
+Use [uv](https://docs.astral.sh/uv/getting-started/installation/) for Python
+dependency management and project commands.
+
 Developer setup, rendering, basemap, and release instructions live in:
 
 - [Technical setup](docs/technical_setup.md)

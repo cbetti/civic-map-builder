@@ -2,18 +2,23 @@
 
 Use this when a fresh public map is worth publishing.
 
+Run commands from the repository root after completing the
+[uv setup](technical_setup.md). For OSM rendering, install or refresh both
+extras together with `uv sync --extra dev --extra basemap` and complete the
+optional basemap setup. The same plain `uv run` commands below apply.
+
 1. Make sure the main branch is current.
 2. Run validation:
 
    ```bash
-   civic-map-builder check
+   uv run civic-map-builder check
    ```
 
 3. Render and stage release assets:
 
    ```bash
-   civic-map-builder render
-   civic-map-builder release-assets --release-name YYYY-MM.N
+   uv run civic-map-builder render
+   uv run civic-map-builder release-assets --release-name YYYY-MM.N
    ```
 
    `release-assets` excludes `sample__*` association folders by default. Use

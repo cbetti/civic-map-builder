@@ -9,12 +9,13 @@
 - Example association data: `associations/sample__blair_highschool/` demonstrates boundary files, including a GeoJSON polygon with an interior exclusion/hole.
 
 ## Build, Test, and Development Commands
-- Create/activate venv: `python3 -m venv .venv`, then `source .venv/bin/activate`; Windows PowerShell: `python -m venv .venv`, then `.\.venv\Scripts\Activate.ps1`.
-- Install dev deps: `pip install -e .[dev]`.
-- Run the CLI: `civic-map-builder --help`, `civic-map-builder check`, and `civic-map-builder render` to verify command wiring.
-- Optional OSM base maps: install `pip install -e ".[dev,basemap]"`, then use `civic-map-builder basemap --help`.
-- Tests: `pytest` (add `-q` for quieter output); coverage check with `pytest --cov=civic_map_builder`.
-- Lint/format: `ruff check civic_map_builder tests` (line length 100 per `pyproject.toml`); run before PRs.
+- Use uv for dependency management and all Python project commands; run commands from the repository root. `uv run` uses `.venv` without activation, including on Windows PowerShell.
+- Install or refresh dev deps: `uv sync --extra dev`. The `dev` dependencies are an extra, not a dependency group. For basemap work, always sync both extras together with `uv sync --extra dev --extra basemap`; separate syncs can remove the previous extra.
+- Run the CLI: `uv run civic-map-builder --help`, `uv run civic-map-builder check`, and `uv run civic-map-builder render` to verify command wiring.
+- Optional OSM base maps: install `uv sync --extra dev --extra basemap`, then use `uv run civic-map-builder basemap --help`. Extraction also requires the external `osmium` CLI.
+- After syncing, use plain `uv run` for all project commands; it retains installed extras by default. Do not repeat `--extra` on each run or use `uv run --exact`.
+- Tests: `uv run pytest` (add `-q` for quieter output); coverage check with `uv run pytest --cov=civic_map_builder`.
+- Lint/format: `uv run ruff check civic_map_builder tests` (line length 100 per `pyproject.toml`); run before PRs.
 
 ## Coding Style & Naming Conventions
 - Python 3.10+, 4-space indentation, line length 100.
